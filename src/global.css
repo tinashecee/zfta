@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+/* Tailwind v4 CSS-first theme tokens.
+   This ensures classes like `bg-primary` / `text-on-background` are generated. */
+@theme {
+  --font-headline: "Manrope";
+  --font-body: "Inter";
+
+  --color-primary: #002b14;
+  --color-primary-container: #004322;
+  --color-primary-fixed: #b3f1c2;
+  --color-primary-fixed-dim: #97d4a7;
+  --color-on-primary-fixed: #002101;
+  --color-on-primary-container: #75b085;
+  --color-on-primary-fixed-variant: #15512e;
+
+  --color-secondary: #725c00;
+  --color-secondary-container: #fdd000;
+  --color-on-secondary-container: #6e5900;
+  --color-secondary-fixed: #ffe07c;
+  --color-secondary-fixed-dim: #ecc200;
+  --color-on-secondary-fixed: #231b00;
+  --color-secondary-fixed-variant: #564500;
+  --color-on-secondary-fixed-variant: #564500;
+
+  --color-tertiary: #510000;
+  --color-tertiary-container: #7a0000;
+  --color-tertiary-fixed: #ffdad4;
+  --color-tertiary-fixed-dim: #ffb4a8;
+  --color-on-tertiary: #ffffff;
+  --color-on-tertiary-container: #ff7c69;
+  --color-on-tertiary-fixed: #410000;
+  --color-on-tertiary-fixed-variant: #930000;
+
+  --color-background: #f8faf7;
+  --color-on-background: #191c1b;
+  --color-on-surface: #191c1b;
+  --color-on-surface-variant: #404941;
+
+  --color-surface: #f8faf7;
+  --color-surface-variant: #e1e3e1;
+  --color-surface-container: #edeeec;
+  --color-surface-container-low: #f2f4f2;
+  --color-surface-container-high: #e7e9e6;
+  --color-surface-container-highest: #e1e3e1;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-bright: #f8faf7;
+  --color-surface-dim: #d9dad8;
+
+  --color-outline: #717971;
+  --color-outline-variant: #c0c9bf;
+
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+
+  --color-inverse-surface: #2e3130;
+  --color-inverse-on-surface: #f0f1ef;
+  --color-inverse-primary: #97d4a7;
+}
+
+/* Small app-wide defaults */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+.glass-panel {
+  background: rgba(248, 250, 247, 0.7);
+  backdrop-filter: blur(20px);
+}
+
+.hero-gradient {
+  background: linear-gradient(135deg, #002b14 0%, #004322 100%);
+}
+
+.premium-shadow {
+  box-shadow: 0 40px 60px -15px rgba(25, 28, 27, 0.06);
+}
+
+/* Used by the recovery page confirmation icon glow */
+.success-glow {
+  box-shadow: 0 0 40px rgba(253, 208, 0, 0.15);
+}
+
+/* Tailwind v4 CSS-first theme doesn't automatically generate these font utilities.
+   Alias them so copied HTML using `font-headline/font-body/...` still looks correct. */
+.font-headline {
+  font-family: Manrope, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+    Helvetica, Arial, sans-serif;
+}
+
+.font-body {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+    Helvetica, Arial, sans-serif;
+}
+
+.font-label {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+    Helvetica, Arial, sans-serif;
+}
+
+.font-manrope {
+  font-family: Manrope, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+    Helvetica, Arial, sans-serif;
+}
+
+.font-inter {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+    Helvetica, Arial, sans-serif;
+}
+
+/* Dashboard textures from the provided HTML templates */
+.tonal-shift {
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+.great-enclosure-texture {
+  background-image: radial-gradient(
+    circle at 2px 2px,
+    rgba(0, 43, 20, 0.03) 1px,
+    transparent 0
+  );
+  background-size: 24px 24px;
+}
+
