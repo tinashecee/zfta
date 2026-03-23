@@ -2,131 +2,161 @@ import { $, component$, useSignal, useStore, useTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
 import {
   getCurrentUser,
-  signOutMock,
-  signUpMock,
+  signOut,
+  signUp,
   type AuthUser,
 } from "~/lib/auth";
 
+/** Values accepted by `POST /api/v1/auth/sign-up` */
+const SIGNUP_ROLES = ["applicant", "reviewer", "supervisor", "system_admin"] as const;
+type SignUpRole = (typeof SIGNUP_ROLES)[number];
+
+type SignUpFormState = {
+  email: string;
+  password: string;
+  confirmPassword: string;
+  full_name: string;
+  mobile_number: string;
+  role: SignUpRole;
+  /** Empty string = omit `body` in JSON */
+  body: "" | "ZIFA" | "SRC" | "IMMIGRATION";
+};
+
+function buildSignUpPayload(form: SignUpFormState): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    email: form.email.trim().toLowerCase(),
+    password: form.password,
+    full_name: form.full_name.trim(),
+    mobile_number: form.mobile_number.trim(),
+    role: form.role,
+  };
+  if (form.body) {
+    payload.body = form.body;
+  }
+  return payload;
+}
+
+type FieldKey = "email" | "full_name" | "mobile_number" | "password" | "confirmPassword";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function errorEmail(v: string): string {
+  const t = v.trim();
+  if (!t) return "Email is required.";
+  if (!EMAIL_RE.test(t)) return "Enter a valid email address.";
+  return "";
+}
+
+function errorFullName(v: string): string {
+  if (!v.trim()) return "Full name is required.";
+  return "";
+}
+
+function errorMobile(v: string): string {
+  if (!v.trim()) return "Mobile number is required.";
+  return "";
+}
+
+function errorPassword(v: string): string {
+  if (!v) return "Password is required.";
+  if (v.length < 8) return "Password must be at least 8 characters.";
+  return "";
+}
+
+function errorConfirmPassword(password: string, confirm: string): string {
+  if (!confirm) return "Confirm your password.";
+  if (password !== confirm) return "Passwords must match.";
+  return "";
+}
+
+function syncFieldErrors(
+  form: SignUpFormState,
+  fieldErrors: Record<FieldKey, string>,
+) {
+  fieldErrors.email = errorEmail(form.email);
+  fieldErrors.full_name = errorFullName(form.full_name);
+  fieldErrors.mobile_number = errorMobile(form.mobile_number);
+  fieldErrors.password = errorPassword(form.password);
+  fieldErrors.confirmPassword = errorConfirmPassword(form.password, form.confirmPassword);
+}
+
+function hasBlockingErrors(fieldErrors: Record<FieldKey, string>): boolean {
+  return Object.values(fieldErrors).some(Boolean);
+}
+
+function inputErrorClass(show: boolean): string {
+  return show
+    ? "ring-2 ring-error/80 bg-error/5"
+    : "focus:ring-1 focus:ring-primary/30";
+}
+
 export default component$(() => {
   const currentUser = useSignal<AuthUser | null>(null);
-  const error = useSignal<string | null>(null);
   const busy = useSignal(false);
-  const form = useStore({
-    registrationPath: "team",
-    organizationName: "",
-    organizationType: "Football Club",
-    establishmentDate: "",
-    affiliationNumber: "",
-    streetAddress: "",
-    province: "Harare",
-    website: "",
-    divisionLeague: "",
-    zifaRegistrationActive: "",
-    principalName: "",
-    sportInOfficialProgram: "",
-    primaryName: "",
-    primaryRole: "",
-    primaryMobile: "",
-    primaryEmail: "",
-    secondaryName: "",
-    secondaryMobile: "",
-    approverBody: "",
-    authorityName: "",
-    departmentUnit: "",
-    staffId: "",
-    supervisorName: "",
-    workStation: "",
-    approvalScope: "",
-    accountEmail: "",
+  const submitAttempted = useSignal(false);
+  const form = useStore<SignUpFormState>({
+    email: "",
     password: "",
     confirmPassword: "",
-    certified: false,
+    full_name: "",
+    mobile_number: "",
+    role: "applicant",
+    body: "",
+  });
+
+  const fieldErrors = useStore<Record<FieldKey, string>>({
+    email: "",
+    full_name: "",
+    mobile_number: "",
+    password: "",
+    confirmPassword: "",
+  });
+
+  const touched = useStore<Record<FieldKey, boolean>>({
+    email: false,
+    full_name: false,
+    mobile_number: false,
+    password: false,
+    confirmPassword: false,
   });
 
   useTask$(() => {
     currentUser.value = getCurrentUser();
   });
 
-  const onSubmit$ = $(() => {
-    error.value = null;
-    if (form.registrationPath === "team") {
-      if (!form.organizationName.trim()) {
-        error.value = "Organization name is required.";
-        return;
-      }
+  const onSubmit$ = $(async () => {
+    submitAttempted.value = true;
+    syncFieldErrors(form, fieldErrors);
 
-      if (!form.affiliationNumber.trim()) {
-        error.value = "Affiliation or registration number is required.";
-        return;
-      }
-
-      if (
-        !form.primaryName.trim() ||
-        !form.primaryRole.trim() ||
-        !form.primaryMobile.trim() ||
-        !form.primaryEmail.trim()
-      ) {
-        error.value = "Complete the primary administrator details before registering.";
-        return;
-      }
-    } else {
-      if (!form.approverBody) {
-        error.value = "Select the approver body before registering.";
-        return;
-      }
-
-      if (!form.authorityName.trim() || !form.departmentUnit.trim() || !form.staffId.trim()) {
-        error.value = "Complete the approver authority details before registering.";
-        return;
-      }
-
-      if (
-        !form.primaryName.trim() ||
-        !form.primaryRole.trim() ||
-        !form.primaryMobile.trim() ||
-        !form.primaryEmail.trim()
-      ) {
-        error.value = "Complete the approver officer details before registering.";
-        return;
-      }
-    }
-
-    if (!form.accountEmail.trim()) {
-      error.value = "Account email is required.";
+    if (!SIGNUP_ROLES.includes(form.role)) {
       return;
     }
 
-    if (form.password !== form.confirmPassword) {
-      error.value = "Password confirmation does not match.";
-      return;
-    }
-
-    if (!form.certified) {
-      error.value = "Please certify that the registration information is accurate.";
+    if (hasBlockingErrors(fieldErrors)) {
       return;
     }
 
     busy.value = true;
+    try {
+      const res = await signUp(buildSignUpPayload(form));
 
-    const res = signUpMock({
-      email: form.accountEmail,
-      password: form.password,
-    });
+      if (!res.ok) {
+        await signOut();
+        window.location.assign(`/sign-up/complete/?error=${encodeURIComponent(res.error)}`);
+        return;
+      }
 
-    busy.value = false;
-
-    if (!res.ok) {
-      error.value = res.error;
-      return;
+      await signOut();
+      window.location.assign(
+        `/sign-up/complete/?success=1&email=${encodeURIComponent(form.email.trim().toLowerCase())}`,
+      );
+    } finally {
+      busy.value = false;
     }
-
-    signOutMock();
-    window.location.assign("/sign-in/?registered=1");
   });
 
   return (
     <>
-      {/* TopNavBar Shell */}
       <header class="fixed top-0 w-full z-50 bg-emerald-950/70 backdrop-blur-xl shadow-2xl shadow-emerald-950/20">
         <nav class="flex justify-between items-center px-8 py-4 max-w-full">
           <div class="text-xl font-bold text-white tracking-tighter font-headline">
@@ -147,16 +177,13 @@ export default component$(() => {
         </nav>
       </header>
 
-      {/* Main Content */}
       <main class="flex-grow flex items-center justify-center pt-24 pb-12 px-6 relative overflow-hidden bg-surface-container-low">
-        {/* Decorative Background Element */}
         <div class="absolute top-0 right-0 -translate-y-1/2 translate-x-1/4 w-[600px] h-[600px] rounded-full bg-primary/5 blur-[120px]" />
         <div class="absolute bottom-0 left-0 translate-y-1/2 -translate-x-1/4 w-[600px] h-[600px] rounded-full bg-secondary/5 blur-[120px]" />
 
         <div class="max-w-5xl w-full grid grid-cols-1 lg:grid-cols-12 gap-0 bg-surface-container-lowest rounded-xl overflow-hidden premium-shadow relative z-10">
-          {/* Left Side: Editorial Branding */}
           <div class="lg:col-span-5 bg-primary p-12 flex flex-col justify-between text-white relative">
-            <div class="absolute inset-0 opacity-10" data-alt="Subtle geometric pattern inspired by Great Zimbabwe ruins">
+            <div class="absolute inset-0 opacity-10" data-alt="Subtle geometric pattern">
               <svg height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                   <pattern height="40" id="grid" patternUnits="userSpaceOnUse" width="40">
@@ -172,11 +199,11 @@ export default component$(() => {
                 Official Portal
               </span>
               <h1 class="text-4xl lg:text-5xl font-headline font-extrabold tracking-tighter leading-none mb-6">
-                The Diplomatic Pitch.
+                Create your account
               </h1>
               <p class="text-emerald-50/70 font-body text-lg leading-relaxed max-w-sm">
-                Submit your full organization registration at sign-up so the admin team can review and approve
-                your account without requesting missing profile details.
+                Register with your work email. You will choose your role and optional approver body for reviewer
+                workflows.
               </p>
             </div>
 
@@ -188,639 +215,293 @@ export default component$(() => {
                   </span>
                 </div>
                 <div>
-                  <p class="text-sm font-bold font-headline">Accredited Access</p>
-                  <p class="text-xs text-emerald-50/50 font-body">Verified identities only</p>
+                  <p class="text-sm font-bold font-headline">Secure registration</p>
+                  <p class="text-xs text-emerald-50/50 font-body">Password min. 8 characters</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Side: Combined Registration Form */}
           <div class="lg:col-span-7 p-8 md:p-12 bg-surface-container-lowest">
             <div class="mb-10">
-              <h2 class="text-3xl font-headline font-bold text-on-background tracking-tight">
-                Organization Registration
-              </h2>
+              <h2 class="text-3xl font-headline font-bold text-on-background tracking-tight">Sign up</h2>
               <p class="text-on-surface-variant mt-2 font-body">
-                Complete the organization profile first, then set your account email and password for admin
-                review.
+                All fields marked with your selections are required by the system unless noted optional.
               </p>
             </div>
 
             {currentUser.value ? (
               <section class="rounded-xl bg-surface-container-highest p-5">
                 <p class="text-sm text-on-surface-variant">
-                  You are already signed in as{" "}
-                  <span class="font-bold">{currentUser.value.email}</span>.
+                  You are already signed in as <span class="font-bold">{currentUser.value.email}</span>.
                 </p>
                 <button
                   type="button"
                   class="mt-4 w-full py-4 rounded-xl bg-primary text-white font-bold hover:bg-primary-container disabled:opacity-60"
-                  onClick$={() => {
-                    signOutMock();
+                  onClick$={$(async () => {
+                    await signOut();
                     window.location.assign("/sign-in/");
-                  }}
+                  })}
                 >
                   Sign out
                 </button>
               </section>
             ) : (
-              <form class="space-y-8" preventdefault:submit onSubmit$={onSubmit$}>
-                <section class="rounded-xl border border-outline-variant/15 bg-surface-container-low p-6">
-                  <h3 class="font-headline text-xl font-bold text-primary">Registration Path</h3>
-                  <div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <label class="flex items-start gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4">
-                      <input
-                        class="mt-1 text-primary focus:ring-primary"
-                        type="radio"
-                        name="registration-path"
-                        checked={form.registrationPath === "team"}
-                        onChange$={() => {
-                          form.registrationPath = "team";
-                        }}
-                      />
-                      <div>
-                        <p class="font-bold text-primary">Team / Organization Registration</p>
-                        <p class="mt-1 text-sm text-on-surface-variant">
-                          For football clubs, academies, schools, and other teams requesting access to the system.
-                        </p>
-                      </div>
-                    </label>
-                    <label class="flex items-start gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4">
-                      <input
-                        class="mt-1 text-primary focus:ring-primary"
-                        type="radio"
-                        name="registration-path"
-                        checked={form.registrationPath === "approver"}
-                        onChange$={() => {
-                          form.registrationPath = "approver";
-                        }}
-                      />
-                      <div>
-                        <p class="font-bold text-primary">Approver Registration</p>
-                        <p class="mt-1 text-sm text-on-surface-variant">
-                          For officers registering under ZIFA, SRC, or Immigration to review and approve workflows.
-                        </p>
-                      </div>
-                    </label>
-                  </div>
-                </section>
-
-                {form.registrationPath === "team" ? (
-                  <>
-                    <section class="rounded-xl border border-outline-variant/15 bg-surface-container-low p-6">
-                      <h3 class="font-headline text-xl font-bold text-primary">Organization Details</h3>
-                      <div class="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
-                        <div class="md:col-span-2">
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Organization Name
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            placeholder="e.g. Dynamos FC or Heritage School"
-                            type="text"
-                            value={form.organizationName}
-                            onInput$={(event) => {
-                              form.organizationName = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Organization Type
-                          </label>
-                          <select
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            value={form.organizationType}
-                            onChange$={(event) => {
-                              form.organizationType = (event.target as HTMLSelectElement).value;
-                            }}
-                          >
-                            <option>Football Club</option>
-                            <option>Football Academy</option>
-                            <option>High School</option>
-                            <option>Primary School</option>
-                            <option>College/University</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Establishment Date
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            type="date"
-                            value={form.establishmentDate}
-                            onInput$={(event) => {
-                              form.establishmentDate = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Affiliation / Registration Number
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            placeholder="ZIFA-XXXX or Min-EDU-XXXX"
-                            type="text"
-                            value={form.affiliationNumber}
-                            onInput$={(event) => {
-                              form.affiliationNumber = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Division / League
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            placeholder="e.g. Premier League or Schools League"
-                            type="text"
-                            value={form.divisionLeague}
-                            onInput$={(event) => {
-                              form.divisionLeague = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div class="md:col-span-2">
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Street Address
-                          </label>
-                          <textarea
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-sm text-on-surface focus:ring-1 focus:ring-primary/30"
-                            rows={2}
-                            placeholder="123 Samora Machel Ave"
-                            value={form.streetAddress}
-                            onInput$={(event) => {
-                              form.streetAddress = (event.target as HTMLTextAreaElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Province
-                          </label>
-                          <select
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            value={form.province}
-                            onChange$={(event) => {
-                              form.province = (event.target as HTMLSelectElement).value;
-                            }}
-                          >
-                            <option>Harare</option>
-                            <option>Bulawayo</option>
-                            <option>Manicaland</option>
-                            <option>Mashonaland Central</option>
-                            <option>Mashonaland East</option>
-                            <option>Mashonaland West</option>
-                            <option>Masvingo</option>
-                            <option>Matabeleland North</option>
-                            <option>Matabeleland South</option>
-                            <option>Midlands</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Website
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            placeholder="https://"
-                            type="url"
-                            value={form.website}
-                            onInput$={(event) => {
-                              form.website = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </section>
-
-                    <section class="rounded-xl border border-outline-variant/15 bg-surface-container-low p-6">
-                      <h3 class="font-headline text-xl font-bold text-primary">Contacts And Status</h3>
-                      <div class="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Primary Administrator Name
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            type="text"
-                            value={form.primaryName}
-                            onInput$={(event) => {
-                              form.primaryName = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Primary Role / Title
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            type="text"
-                            placeholder="Secretary General"
-                            value={form.primaryRole}
-                            onInput$={(event) => {
-                              form.primaryRole = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Primary Mobile
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            type="tel"
-                            placeholder="+263..."
-                            value={form.primaryMobile}
-                            onInput$={(event) => {
-                              form.primaryMobile = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Official Contact Email
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            type="email"
-                            value={form.primaryEmail}
-                            onInput$={(event) => {
-                              form.primaryEmail = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Secondary Contact Name
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            type="text"
-                            value={form.secondaryName}
-                            onInput$={(event) => {
-                              form.secondaryName = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Secondary Mobile
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            type="tel"
-                            placeholder="+263..."
-                            value={form.secondaryMobile}
-                            onInput$={(event) => {
-                              form.secondaryMobile = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Principal / Headmaster Name
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            type="text"
-                            value={form.principalName}
-                            onInput$={(event) => {
-                              form.principalName = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Sport In Official Program?
-                          </label>
-                          <select
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            value={form.sportInOfficialProgram}
-                            onChange$={(event) => {
-                              form.sportInOfficialProgram = (event.target as HTMLSelectElement).value;
-                            }}
-                          >
-                            <option value="">Select</option>
-                            <option value="Yes">Yes</option>
-                            <option value="No">No</option>
-                          </select>
-                        </div>
-                        <div class="md:col-span-2">
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            ZIFA Registration Active?
-                          </label>
-                          <select
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            value={form.zifaRegistrationActive}
-                            onChange$={(event) => {
-                              form.zifaRegistrationActive = (event.target as HTMLSelectElement).value;
-                            }}
-                          >
-                            <option value="">Select</option>
-                            <option value="Yes">Yes</option>
-                            <option value="No">No</option>
-                          </select>
-                        </div>
-                      </div>
-                    </section>
-                  </>
-                ) : (
-                  <>
-                    <section class="rounded-xl border border-outline-variant/15 bg-surface-container-low p-6">
-                      <h3 class="font-headline text-xl font-bold text-primary">Approver Authority Details</h3>
-                      <div class="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Approver Body
-                          </label>
-                          <select
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            value={form.approverBody}
-                            onChange$={(event) => {
-                              form.approverBody = (event.target as HTMLSelectElement).value;
-                            }}
-                          >
-                            <option value="">Select approver body</option>
-                            <option value="ZIFA">ZIFA</option>
-                            <option value="SRC">SRC</option>
-                            <option value="Immigration">Immigration</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Authority / Institution Name
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            placeholder="e.g. ZIFA Secretariat"
-                            type="text"
-                            value={form.authorityName}
-                            onInput$={(event) => {
-                              form.authorityName = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Department / Unit
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            placeholder="Compliance, Registration, Border Control..."
-                            type="text"
-                            value={form.departmentUnit}
-                            onInput$={(event) => {
-                              form.departmentUnit = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Staff / Employee ID
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            placeholder="STAFF-0042"
-                            type="text"
-                            value={form.staffId}
-                            onInput$={(event) => {
-                              form.staffId = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Work Station / Office
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            placeholder="Harare HQ or Plumtree Border Post"
-                            type="text"
-                            value={form.workStation}
-                            onInput$={(event) => {
-                              form.workStation = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Province
-                          </label>
-                          <select
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            value={form.province}
-                            onChange$={(event) => {
-                              form.province = (event.target as HTMLSelectElement).value;
-                            }}
-                          >
-                            <option>Harare</option>
-                            <option>Bulawayo</option>
-                            <option>Manicaland</option>
-                            <option>Mashonaland Central</option>
-                            <option>Mashonaland East</option>
-                            <option>Mashonaland West</option>
-                            <option>Masvingo</option>
-                            <option>Matabeleland North</option>
-                            <option>Matabeleland South</option>
-                            <option>Midlands</option>
-                          </select>
-                        </div>
-                        <div class="md:col-span-2">
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Approval Scope
-                          </label>
-                          <select
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            value={form.approvalScope}
-                            onChange$={(event) => {
-                              form.approvalScope = (event.target as HTMLSelectElement).value;
-                            }}
-                          >
-                            <option value="">Select approval scope</option>
-                            <option value="National team clearances">National team clearances</option>
-                            <option value="Club and academy approvals">Club and academy approvals</option>
-                            <option value="School and youth approvals">School and youth approvals</option>
-                            <option value="Immigration and border clearances">Immigration and border clearances</option>
-                          </select>
-                        </div>
-                      </div>
-                    </section>
-
-                    <section class="rounded-xl border border-outline-variant/15 bg-surface-container-low p-6">
-                      <h3 class="font-headline text-xl font-bold text-primary">Approver Officer Details</h3>
-                      <div class="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Officer Full Name
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            type="text"
-                            value={form.primaryName}
-                            onInput$={(event) => {
-                              form.primaryName = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Position / Title
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            type="text"
-                            placeholder="Registration Officer"
-                            value={form.primaryRole}
-                            onInput$={(event) => {
-                              form.primaryRole = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Official Mobile
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            type="tel"
-                            placeholder="+263..."
-                            value={form.primaryMobile}
-                            onInput$={(event) => {
-                              form.primaryMobile = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Official Email
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            type="email"
-                            value={form.primaryEmail}
-                            onInput$={(event) => {
-                              form.primaryEmail = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Supervisor Name
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            type="text"
-                            value={form.supervisorName}
-                            onInput$={(event) => {
-                              form.supervisorName = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Secondary Contact / Desk Line
-                          </label>
-                          <input
-                            class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            type="tel"
-                            value={form.secondaryMobile}
-                            onInput$={(event) => {
-                              form.secondaryMobile = (event.target as HTMLInputElement).value;
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </section>
-                  </>
-                )}
-
-                <section class="rounded-xl border border-outline-variant/15 bg-surface-container-low p-6">
-                  <h3 class="font-headline text-xl font-bold text-primary">Account Access</h3>
-                  <div class="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
-                    <div class="md:col-span-2">
-                      <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                        Account Email Address
-                      </label>
-                      <input
-                        class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                        placeholder="official@delegation.gov.zw"
-                        type="email"
-                        value={form.accountEmail}
-                        onInput$={(event) => {
-                          form.accountEmail = (event.target as HTMLInputElement).value;
-                        }}
-                        autoComplete="email"
-                      />
-                    </div>
-                    <div>
-                      <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                        Password
-                      </label>
-                      <input
-                        class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                        placeholder="••••••••••••"
-                        type="password"
-                        value={form.password}
-                        onInput$={(event) => {
-                          form.password = (event.target as HTMLInputElement).value;
-                        }}
-                        autoComplete="new-password"
-                      />
-                    </div>
-                    <div>
-                      <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                        Confirm Password
-                      </label>
-                      <input
-                        class="w-full rounded-xl border-none bg-surface-container-lowest p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                        placeholder="••••••••••••"
-                        type="password"
-                        value={form.confirmPassword}
-                        onInput$={(event) => {
-                          form.confirmPassword = (event.target as HTMLInputElement).value;
-                        }}
-                        autoComplete="new-password"
-                      />
-                    </div>
-                  </div>
-                </section>
-
-                <div class="rounded-xl bg-surface-container-highest p-5">
-                  <label class="flex items-start gap-3">
-                    <input
-                      class="mt-1 rounded border-outline text-primary focus:ring-primary"
-                      type="checkbox"
-                      checked={form.certified}
-                      onChange$={(event) => {
-                        form.certified = (event.target as HTMLInputElement).checked;
-                      }}
-                    />
-                    <span class="text-sm text-on-surface-variant">
-                      I certify that the organization and contact information provided is accurate and ready for
-                      admin verification during account approval.
-                    </span>
+              <form class="space-y-6" preventdefault:submit onSubmit$={onSubmit$}>
+                <div>
+                  <label
+                    class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant"
+                    for="signup-email"
+                  >
+                    Email
                   </label>
+                  <input
+                    id="signup-email"
+                    class={`w-full rounded-xl border-none bg-surface-container-low p-4 text-on-surface outline-none transition-shadow ${inputErrorClass(
+                      (touched.email || submitAttempted.value) && Boolean(fieldErrors.email),
+                    )}`}
+                    type="email"
+                    placeholder="you@organization.co.zw"
+                    value={form.email}
+                    aria-invalid={(touched.email || submitAttempted.value) && Boolean(fieldErrors.email)}
+                    aria-describedby={
+                      (touched.email || submitAttempted.value) && fieldErrors.email ? "signup-email-error" : undefined
+                    }
+                    onInput$={(e) => {
+                      form.email = (e.target as HTMLInputElement).value;
+                      if (touched.email || submitAttempted.value) {
+                        fieldErrors.email = errorEmail(form.email);
+                      }
+                    }}
+                    onBlur$={() => {
+                      touched.email = true;
+                      fieldErrors.email = errorEmail(form.email);
+                    }}
+                    autoComplete="email"
+                    required
+                  />
+                  {(touched.email || submitAttempted.value) && fieldErrors.email ? (
+                    <p id="signup-email-error" class="mt-1.5 text-xs text-error" role="alert">
+                      {fieldErrors.email}
+                    </p>
+                  ) : null}
                 </div>
 
-                {error.value ? (
-                  <p class="text-sm text-error" role="alert">
-                    {error.value}
-                  </p>
-                ) : null}
+                <div>
+                  <label
+                    class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant"
+                    for="signup-full-name"
+                  >
+                    Full name
+                  </label>
+                  <input
+                    id="signup-full-name"
+                    class={`w-full rounded-xl border-none bg-surface-container-low p-4 text-on-surface outline-none transition-shadow ${inputErrorClass(
+                      (touched.full_name || submitAttempted.value) && Boolean(fieldErrors.full_name),
+                    )}`}
+                    type="text"
+                    placeholder="As it should appear on your profile"
+                    value={form.full_name}
+                    aria-invalid={(touched.full_name || submitAttempted.value) && Boolean(fieldErrors.full_name)}
+                    aria-describedby={
+                      (touched.full_name || submitAttempted.value) && fieldErrors.full_name
+                        ? "signup-full-name-error"
+                        : undefined
+                    }
+                    onInput$={(e) => {
+                      form.full_name = (e.target as HTMLInputElement).value;
+                      if (touched.full_name || submitAttempted.value) {
+                        fieldErrors.full_name = errorFullName(form.full_name);
+                      }
+                    }}
+                    onBlur$={() => {
+                      touched.full_name = true;
+                      fieldErrors.full_name = errorFullName(form.full_name);
+                    }}
+                    autoComplete="name"
+                    required
+                  />
+                  {(touched.full_name || submitAttempted.value) && fieldErrors.full_name ? (
+                    <p id="signup-full-name-error" class="mt-1.5 text-xs text-error" role="alert">
+                      {fieldErrors.full_name}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <label
+                    class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant"
+                    for="signup-mobile"
+                  >
+                    Mobile number
+                  </label>
+                  <input
+                    id="signup-mobile"
+                    class={`w-full rounded-xl border-none bg-surface-container-low p-4 text-on-surface outline-none transition-shadow ${inputErrorClass(
+                      (touched.mobile_number || submitAttempted.value) && Boolean(fieldErrors.mobile_number),
+                    )}`}
+                    type="tel"
+                    placeholder="+263..."
+                    value={form.mobile_number}
+                    aria-invalid={
+                      (touched.mobile_number || submitAttempted.value) && Boolean(fieldErrors.mobile_number)
+                    }
+                    aria-describedby={
+                      (touched.mobile_number || submitAttempted.value) && fieldErrors.mobile_number
+                        ? "signup-mobile-error"
+                        : undefined
+                    }
+                    onInput$={(e) => {
+                      form.mobile_number = (e.target as HTMLInputElement).value;
+                      if (touched.mobile_number || submitAttempted.value) {
+                        fieldErrors.mobile_number = errorMobile(form.mobile_number);
+                      }
+                    }}
+                    onBlur$={() => {
+                      touched.mobile_number = true;
+                      fieldErrors.mobile_number = errorMobile(form.mobile_number);
+                    }}
+                    autoComplete="tel"
+                    required
+                  />
+                  {(touched.mobile_number || submitAttempted.value) && fieldErrors.mobile_number ? (
+                    <p id="signup-mobile-error" class="mt-1.5 text-xs text-error" role="alert">
+                      {fieldErrors.mobile_number}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <div class="md:col-span-2">
+                    <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                      Role
+                    </label>
+                    <select
+                      class="w-full rounded-xl border-none bg-surface-container-low p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
+                      value={form.role}
+                      onChange$={(e) => {
+                        form.role = (e.target as HTMLSelectElement).value as SignUpRole;
+                      }}
+                      required
+                    >
+                      <option value="applicant">Applicant</option>
+                      <option value="reviewer">Reviewer</option>
+                      <option value="supervisor">Supervisor</option>
+                      <option value="system_admin">System admin</option>
+                    </select>
+                  </div>
+
+                  <div class="md:col-span-2">
+                    <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                      Body <span class="font-normal normal-case text-on-surface-variant/80">(optional)</span>
+                    </label>
+                    <select
+                      class="w-full rounded-xl border-none bg-surface-container-low p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
+                      value={form.body}
+                      onChange$={(e) => {
+                        form.body = (e.target as HTMLSelectElement).value as SignUpFormState["body"];
+                      }}
+                    >
+                      <option value="">None — omit</option>
+                      <option value="ZIFA">ZIFA</option>
+                      <option value="SRC">SRC</option>
+                      <option value="IMMIGRATION">IMMIGRATION</option>
+                    </select>
+                    <p class="mt-1 text-xs text-on-surface-variant">
+                      For reviewers: link to ZIFA, SRC, or Immigration where applicable.
+                    </p>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <div>
+                    <label
+                      class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant"
+                      for="signup-password"
+                    >
+                      Password <span class="text-xs font-normal">(min 8)</span>
+                    </label>
+                    <input
+                      id="signup-password"
+                      class={`w-full rounded-xl border-none bg-surface-container-low p-4 text-on-surface outline-none transition-shadow ${inputErrorClass(
+                        (touched.password || submitAttempted.value) && Boolean(fieldErrors.password),
+                      )}`}
+                      type="password"
+                      value={form.password}
+                      aria-invalid={(touched.password || submitAttempted.value) && Boolean(fieldErrors.password)}
+                      aria-describedby={
+                        (touched.password || submitAttempted.value) && fieldErrors.password
+                          ? "signup-password-error"
+                          : undefined
+                      }
+                      onInput$={(e) => {
+                        form.password = (e.target as HTMLInputElement).value;
+                        fieldErrors.password = errorPassword(form.password);
+                        fieldErrors.confirmPassword = errorConfirmPassword(form.password, form.confirmPassword);
+                      }}
+                      onBlur$={() => {
+                        touched.password = true;
+                        fieldErrors.password = errorPassword(form.password);
+                        fieldErrors.confirmPassword = errorConfirmPassword(form.password, form.confirmPassword);
+                      }}
+                      autoComplete="new-password"
+                      required
+                      minLength={8}
+                    />
+                    {(touched.password || submitAttempted.value) && fieldErrors.password ? (
+                      <p id="signup-password-error" class="mt-1.5 text-xs text-error" role="alert">
+                        {fieldErrors.password}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <label
+                      class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant"
+                      for="signup-confirm-password"
+                    >
+                      Confirm password
+                    </label>
+                    <input
+                      id="signup-confirm-password"
+                      class={`w-full rounded-xl border-none bg-surface-container-low p-4 text-on-surface outline-none transition-shadow ${inputErrorClass(
+                        (touched.confirmPassword || submitAttempted.value) && Boolean(fieldErrors.confirmPassword),
+                      )}`}
+                      type="password"
+                      value={form.confirmPassword}
+                      aria-invalid={
+                        (touched.confirmPassword || submitAttempted.value) && Boolean(fieldErrors.confirmPassword)
+                      }
+                      aria-describedby={
+                        (touched.confirmPassword || submitAttempted.value) && fieldErrors.confirmPassword
+                          ? "signup-confirm-password-error"
+                          : undefined
+                      }
+                      onInput$={(e) => {
+                        form.confirmPassword = (e.target as HTMLInputElement).value;
+                        fieldErrors.confirmPassword = errorConfirmPassword(form.password, form.confirmPassword);
+                      }}
+                      onBlur$={() => {
+                        touched.confirmPassword = true;
+                        fieldErrors.confirmPassword = errorConfirmPassword(form.password, form.confirmPassword);
+                      }}
+                      autoComplete="new-password"
+                      required
+                    />
+                    {(touched.confirmPassword || submitAttempted.value) && fieldErrors.confirmPassword ? (
+                      <p id="signup-confirm-password-error" class="mt-1.5 text-xs text-error" role="alert">
+                        {fieldErrors.confirmPassword}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
 
                 <div class="pt-2">
                   <button
-                    class="w-full py-4 bg-gradient-to-br from-primary to-primary-container text-white font-headline font-bold rounded-xl shadow-lg shadow-primary/20 hover:translate-y-[-2px] active:scale-95 transition-all duration-300 flex items-center justify-center gap-3 disabled:opacity-60"
+                    class="w-full py-4 bg-gradient-to-br from-primary to-primary-container text-on-primary font-headline font-bold rounded-xl shadow-lg shadow-primary/20 hover:translate-y-[-2px] active:scale-95 transition-all duration-300 flex items-center justify-center gap-3 disabled:opacity-60"
                     type="submit"
                     disabled={busy.value}
                   >
-                    {busy.value ? "Submitting..." : "Submit registration"}
+                    {busy.value ? "Submitting..." : "Create account"}
                     <span class="material-symbols-outlined text-lg" aria-hidden="true">
                       arrow_forward
                     </span>
@@ -841,12 +522,9 @@ export default component$(() => {
         </div>
       </main>
 
-      {/* Footer Shell */}
       <footer class="bg-emerald-950 w-full py-12 px-8">
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div class="text-lg font-bold text-white font-headline">
-            Zimbabwe Football Travel Authority
-          </div>
+          <div class="text-lg font-bold text-white font-headline">Zimbabwe Football Travel Authority</div>
           <div class="flex flex-wrap justify-center gap-8 font-body text-sm antialiased">
             <a class="text-emerald-200/60 hover:text-amber-400 transition-colors" href="#">
               Privacy Policy
@@ -865,6 +543,5 @@ export default component$(() => {
 });
 
 export const head: DocumentHead = {
-  title: "Organization Registration",
+  title: "Sign up",
 };
-

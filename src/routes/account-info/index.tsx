@@ -4,7 +4,7 @@ import {
   clearPendingAccountInfoMock,
   getCurrentUser,
   getPendingAccountInfoMock,
-  signOutMock,
+  signOut,
   type AuthUser,
 } from "~/lib/auth";
 
@@ -20,7 +20,7 @@ export default component$(() => {
   const onContinue$ = $(() => {
     // For now, forward to the organization profile screen.
     clearPendingAccountInfoMock();
-    window.location.assign("/organization-profile/");
+    window.location.assign("/applicant/organization-profile/");
   });
 
   return (
@@ -34,7 +34,7 @@ export default component$(() => {
           <p class="text-on-surface-variant">
             There is no account setup prompt at the moment.
           </p>
-          <a class="mt-4 inline-block text-primary hover:underline" href="/organization-profile/">
+          <a class="mt-4 inline-block text-primary hover:underline" href="/applicant/organization-profile/">
             Go to Organization Profile
           </a>
         </section>
@@ -71,10 +71,10 @@ export default component$(() => {
             <button
               type="button"
               class="rounded-xl bg-surface-container-high px-5 py-3 text-primary font-bold hover:bg-surface-container-lowest"
-              onClick$={() => {
-                signOutMock();
+              onClick$={$(async () => {
+                await signOut();
                 window.location.assign("/sign-in/");
-              }}
+              })}
             >
               Sign out
             </button>

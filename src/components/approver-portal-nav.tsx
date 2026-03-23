@@ -1,4 +1,5 @@
-import { $, component$, useSignal } from "@builder.io/qwik";
+import { $, component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
+import { getCurrentUser, normalizeApproverBody, signOut } from "~/lib/auth";
 
 type ApproverNavItemKey = "dashboard" | "pendingQueue" | "approved" | "archived" | "systemLogs";
 
@@ -23,6 +24,11 @@ const NAV_ITEMS: Array<{
 
 export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeItem, title }) => {
   const menuOpen = useSignal(false);
+  const bodyLabel = useSignal<string | null>(null);
+
+  useVisibleTask$(() => {
+    bodyLabel.value = normalizeApproverBody(getCurrentUser()?.body);
+  });
 
   const toggleMenu$ = $(() => {
     menuOpen.value = !menuOpen.value;
@@ -30,6 +36,11 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
 
   const closeMenu$ = $(() => {
     menuOpen.value = false;
+  });
+
+  const onSignOut$ = $(async () => {
+    await signOut();
+    window.location.assign("/sign-in/");
   });
 
   return (
@@ -44,9 +55,16 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
           >
             menu
           </button>
-          <h2 class="max-w-[11rem] truncate font-manrope text-sm font-bold tracking-tighter text-white sm:max-w-[18rem] sm:text-base lg:max-w-none lg:text-xl">
-            {title}
-          </h2>
+          <div class="flex min-w-0 max-w-[11rem] flex-col sm:max-w-[18rem] lg:max-w-none">
+            {bodyLabel.value ? (
+              <span class="font-manrope text-[10px] font-bold uppercase tracking-widest text-amber-400">
+                {bodyLabel.value}
+              </span>
+            ) : null}
+            <h2 class="truncate font-manrope text-sm font-bold tracking-tighter text-white sm:text-base lg:text-xl">
+              {title}
+            </h2>
+          </div>
         </div>
 
         <div class="flex items-center gap-3 sm:gap-6">
@@ -101,6 +119,10 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
             <div class="flex items-center justify-between mb-10">
               <div>
                 <h1 class="text-lg font-black text-white uppercase tracking-tighter">Travel Authority</h1>
+                <p class="font-manrope uppercase tracking-widest text-[11px] text-amber-400/90">
+                  {bodyLabel.value ? `${bodyLabel.value} · ` : ""}
+                  Approver
+                </p>
                 <p class="font-manrope uppercase tracking-widest text-[11px] text-emerald-100/50">
                   Official Approver Portal
                 </p>
@@ -155,13 +177,14 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
                   <span class="material-symbols-outlined">help_outline</span>
                   <span>Support</span>
                 </a>
-                <a
-                  class="flex items-center gap-3 px-4 py-2 text-emerald-100/50 font-manrope uppercase tracking-widest text-[11px] hover:text-white transition-all"
-                  href="#"
+                <button
+                  class="flex w-full items-center gap-3 px-4 py-2 text-left text-emerald-100/50 font-manrope uppercase tracking-widest text-[11px] hover:text-white transition-all"
+                  type="button"
+                  onClick$={onSignOut$}
                 >
                   <span class="material-symbols-outlined">logout</span>
                   <span>Sign Out</span>
-                </a>
+                </button>
               </div>
             </div>
           </nav>

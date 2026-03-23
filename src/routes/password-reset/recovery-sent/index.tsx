@@ -1,21 +1,17 @@
-import { component$, useSignal, useTask$ } from "@builder.io/qwik";
+import { component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
-import {
-  getPasswordResetEmailMock,
-  isPasswordResetSentMock,
-  type AuthUser,
-  getCurrentUser,
-} from "~/lib/auth";
-
 export default component$(() => {
   const email = useSignal<string | null>(null);
   const sent = useSignal(false);
-  const currentUser = useSignal<AuthUser | null>(null);
 
-  useTask$(() => {
-    email.value = getPasswordResetEmailMock();
-    sent.value = isPasswordResetSentMock();
-    currentUser.value = getCurrentUser();
+  useVisibleTask$(() => {
+    try {
+      const e = sessionStorage.getItem("zfta_recovery_email");
+      email.value = e;
+      sent.value = Boolean(e);
+    } catch {
+      sent.value = false;
+    }
   });
 
   return (
@@ -106,17 +102,12 @@ export default component$(() => {
       {/* Footer */}
       <footer class="bg-emerald-950 w-full py-12 px-8">
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div class="text-lg font-bold text-white font-headline">
-            Zimbabwe Football Travel Authority
-          </div>
+          <div class="text-lg font-bold text-white font-headline">Zimbabwe Football Travel Authority</div>
           <div class="flex flex-wrap justify-center gap-8 font-body text-sm antialiased">
             <a class="text-emerald-200/60 hover:text-amber-400 transition-colors" href="#">
               Privacy Policy
             </a>
-            <a
-              class="text-emerald-200/60 hover:text-amber-400 transition-colors"
-              href="#"
-            >
+            <a class="text-emerald-200/60 hover:text-amber-400 transition-colors" href="#">
               Terms of Service
             </a>
           </div>
@@ -132,4 +123,3 @@ export default component$(() => {
 export const head: DocumentHead = {
   title: "Recovery Link Sent",
 };
-

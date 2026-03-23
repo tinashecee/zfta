@@ -1,11 +1,8 @@
 import { $, component$, useSignal, useTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
 import { useLocation } from "@builder.io/qwik-city";
-import {
-  getCurrentUser,
-  signInMock,
-  type AuthUser,
-} from "~/lib/auth";
+import { resolveApplicantPostLoginPath } from "~/lib/applicant-redirect";
+import { getCurrentUser, signIn, type AuthUser } from "~/lib/auth";
 
 export default component$(() => {
   const location = useLocation();
@@ -17,13 +14,17 @@ export default component$(() => {
 
   useTask$(() => {
     currentUser.value = getCurrentUser();
+    if (location.url.searchParams.get("error") === "approver") {
+      error.value =
+        "Approver profile is missing a valid body (ZIFA, SRC, or IMMIGRATION). Please contact support.";
+    }
   });
 
-  const onSubmit$ = $(() => {
+  const onSubmit$ = $(async () => {
     error.value = null;
     busy.value = true;
 
-    const res = signInMock({
+    const res = await signIn({
       email: email.value,
       password: password.value,
     });
@@ -35,11 +36,15 @@ export default component$(() => {
       return;
     }
 
-    window.location.assign("/");
+    const u = getCurrentUser();
+    if (u) {
+      const path = await resolveApplicantPostLoginPath(u);
+      window.location.assign(path);
+    }
   });
 
   return (
-    <>
+    <div class="min-h-screen flex flex-col">
       {/* TopNavBar Shell (from your provided HTML) */}
       <header class="fixed top-0 w-full z-50 bg-emerald-950/70 backdrop-blur-xl shadow-2xl shadow-emerald-950/20">
         <nav class="flex justify-between items-center px-8 py-4 max-w-full">
@@ -65,7 +70,7 @@ export default component$(() => {
       </header>
 
       {/* Main Content: Login Portal (from your HTML) */}
-      <main class="flex-grow flex items-center justify-center pt-24 pb-12 px-6 relative overflow-hidden bg-surface-container-low">
+      <main class="flex-1 flex items-center justify-center pt-24 pb-12 px-6 relative overflow-hidden bg-surface-container-low">
         {/* Decorative Background Element */}
         <div class="absolute top-0 right-0 -translate-y-1/2 translate-x-1/4 w-[600px] h-[600px] rounded-full bg-primary/5 blur-[120px]" />
         <div class="absolute bottom-0 left-0 translate-y-1/2 -translate-x-1/4 w-[600px] h-[600px] rounded-full bg-secondary/5 blur-[120px]" />
@@ -124,8 +129,14 @@ export default component$(() => {
 
             {location.url.searchParams.get("registered") === "1" ? (
               <div class="mb-6 rounded-xl border border-primary/15 bg-primary/5 p-4 text-sm text-on-surface-variant">
-                Registration submitted successfully. Your organization profile was captured during sign-up. You
-                can now sign in while your account awaits admin review.
+                Registration submitted successfully. You can sign in while your account awaits admin review if
+                required.
+              </div>
+            ) : null}
+
+            {location.url.searchParams.get("reset") === "1" ? (
+              <div class="mb-6 rounded-xl border border-primary/15 bg-primary/5 p-4 text-sm text-on-surface-variant">
+                Password reset successful. Sign in with your new password.
               </div>
             ) : null}
 
@@ -224,7 +235,7 @@ export default component$(() => {
       </main>
 
       {/* Footer Shell */}
-      <footer class="bg-emerald-950 w-full py-12 px-8">
+      <footer class="mt-auto bg-emerald-950 w-full shrink-0 py-12 px-8">
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div class="text-lg font-bold text-white font-headline">
             Zimbabwe Football Travel Authority
@@ -242,7 +253,7 @@ export default component$(() => {
           </div>
         </div>
       </footer>
-    </>
+    </div>
   );
 });
 

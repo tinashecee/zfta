@@ -47,15 +47,32 @@ export default defineConfig(({ command, mode }): UserConfig => {
     //     : undefined,
 
     server: {
+      host: "0.0.0.0",
+      port: 4000,
       headers: {
         // Don't cache the server response in dev mode
         "Cache-Control": "public, max-age=0",
       },
+      // Browser calls stay same-origin (0.0.0.0:4002); Vite forwards /api → API (avoids CORS in dev).
+      proxy: {
+        "/api": {
+          target: "http://localhost:8080",
+          changeOrigin: true,
+        },
+      },
     },
     preview: {
+      host: "0.0.0.0",
+      port: 4000,
       headers: {
         // Do cache the server response in preview (non-adapter production build)
         "Cache-Control": "public, max-age=600",
+      },
+      proxy: {
+        "/api": {
+          target: "http://localhost:8080",
+          changeOrigin: true,
+        },
       },
     },
   };

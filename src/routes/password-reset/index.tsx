@@ -1,10 +1,6 @@
 import { $, component$, useSignal, useTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
-import {
-  getCurrentUser,
-  requestPasswordResetMock,
-  type AuthUser,
-} from "~/lib/auth";
+import { getCurrentUser, requestPasswordReset, type AuthUser } from "~/lib/auth";
 
 export default component$(() => {
   const currentUser = useSignal<AuthUser | null>(null);
@@ -17,17 +13,23 @@ export default component$(() => {
     currentUser.value = getCurrentUser();
   });
 
-  const onSubmit$ = $(() => {
+  const onSubmit$ = $(async () => {
     error.value = null;
     busy.value = true;
 
-    const res = requestPasswordResetMock(email.value);
+    const res = await requestPasswordReset(email.value);
 
     busy.value = false;
 
     if (!res.ok) {
       error.value = res.error;
       return;
+    }
+
+    try {
+      sessionStorage.setItem("zfta_recovery_email", email.value.trim().toLowerCase());
+    } catch {
+      /* ignore */
     }
 
     window.location.assign("/password-reset/recovery-sent/");

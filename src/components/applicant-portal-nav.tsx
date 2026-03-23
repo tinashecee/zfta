@@ -1,7 +1,7 @@
 import { $, component$, useSignal } from "@builder.io/qwik";
-import { signOutMock } from "~/lib/auth";
+import { signOut } from "~/lib/auth";
 
-type NavItemKey = "dashboard" | "applications" | "calendar" | "settings";
+type NavItemKey = "dashboard" | "applications" | "calendar" | "organization" | "settings";
 
 type ApplicantPortalNavProps = {
   activeItem: NavItemKey;
@@ -21,6 +21,12 @@ const NAV_ITEMS: Array<{
     href: "/applicant/dashboard/#applications",
   },
   { key: "calendar", label: "Calendar", icon: "calendar_today", href: "/applicant/calendar/" },
+  {
+    key: "organization",
+    label: "Organization",
+    icon: "corporate_fare",
+    href: "/applicant/organization-profile/",
+  },
   { key: "settings", label: "Settings", icon: "settings", href: "#" },
 ];
 
@@ -43,6 +49,11 @@ export const ApplicantPortalNav = component$<ApplicantPortalNavProps>(({ activeI
       width: typeof window !== "undefined" ? window.innerWidth : null,
     });
     menuOpen.value = false;
+  });
+
+  const onSignOut$ = $(async () => {
+    await signOut();
+    window.location.assign("/sign-in/");
   });
 
   return (
@@ -156,31 +167,7 @@ export const ApplicantPortalNav = component$<ApplicantPortalNavProps>(({ activeI
             </div>
 
             <div class="mt-auto pt-8 border-t border-white/10">
-              <div class="bg-white/5 rounded-xl p-4 border border-white/10">
-                <div class="flex items-center gap-3 mb-3">
-                  <div class="w-10 h-10 rounded-lg bg-primary-container flex items-center justify-center text-white font-bold text-sm">
-                    DFC
-                  </div>
-                  <div class="overflow-hidden">
-                    <h3 class="text-emerald-50 font-bold text-sm truncate">Dynamos FC</h3>
-                    <p class="text-emerald-100/40 text-[10px] uppercase font-bold tracking-tight">
-                      ZIFA Affiliation: 4492-Z
-                    </p>
-                  </div>
-                </div>
-
-                <div class="space-y-1.5">
-                  <div class="flex justify-between items-center text-[10px] font-bold uppercase text-emerald-100/60">
-                    <span>Profile Complete</span>
-                    <span class="text-secondary-fixed">100%</span>
-                  </div>
-                  <div class="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                    <div class="w-full h-full bg-secondary-fixed" />
-                  </div>
-                </div>
-              </div>
-
-              <div class="mt-4 flex flex-col gap-1">
+              <div class="flex flex-col gap-1">
                 <a
                   class="flex items-center gap-3 text-emerald-100/40 hover:text-emerald-50 py-2 px-2 text-xs font-medium transition-colors"
                   href="#"
@@ -188,18 +175,14 @@ export const ApplicantPortalNav = component$<ApplicantPortalNavProps>(({ activeI
                   <span class="material-symbols-outlined text-lg">contact_support</span>
                   Help Center
                 </a>
-                <a
-                  class="flex items-center gap-3 text-emerald-100/40 hover:text-error py-2 px-2 text-xs font-medium transition-colors"
-                  href="#"
-                  onClick$={(event) => {
-                    event.stopPropagation();
-                    signOutMock();
-                    window.location.assign("/sign-in/");
-                  }}
+                <button
+                  class="flex w-full items-center gap-3 text-emerald-100/40 hover:text-error py-2 px-2 text-xs font-medium transition-colors text-left"
+                  type="button"
+                  onClick$={onSignOut$}
                 >
                   <span class="material-symbols-outlined text-lg">logout</span>
                   Sign Out
-                </a>
+                </button>
               </div>
             </div>
           </nav>

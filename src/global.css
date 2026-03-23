@@ -7,6 +7,8 @@
   --font-body: "Inter";
 
   --color-primary: #002b14;
+  /* Text/icons on solid primary (dark green) — required for `text-on-primary` on buttons */
+  --color-on-primary: #ffffff;
   --color-primary-container: #004322;
   --color-primary-fixed: #b3f1c2;
   --color-primary-fixed-dim: #97d4a7;

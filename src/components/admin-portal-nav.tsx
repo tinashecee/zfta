@@ -1,6 +1,46 @@
-import { $, component$, useSignal } from "@builder.io/qwik";
+import { $, component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
+import { getCurrentUser, signOut } from "~/lib/auth";
 
 type AdminNavItemKey = "overview" | "accounts" | "systemUsers" | "applications" | "settings";
+
+function roleLabel(role: string): string {
+  switch (role) {
+    case "system_admin":
+      return "System admin";
+    case "applicant":
+      return "Applicant";
+    case "reviewer":
+      return "Reviewer";
+    case "supervisor":
+      return "Supervisor";
+    default:
+      return role.replace(/_/g, " ");
+  }
+}
+
+function initialsFromUser(fullName: string, email: string): string {
+  const n = fullName.trim();
+  if (n) {
+    const parts = n.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
+    }
+    if (parts.length === 1 && parts[0].length >= 2) {
+      return parts[0].slice(0, 2).toUpperCase();
+    }
+    if (parts.length === 1) {
+      return parts[0].slice(0, 1).toUpperCase();
+    }
+  }
+  const e = email.trim();
+  if (e.length >= 2) return e.slice(0, 2).toUpperCase();
+  return "?";
+}
+
+const onLogout$ = $(async () => {
+  await signOut();
+  window.location.assign("/sign-in/");
+});
 
 type AdminPortalNavProps = {
   activeItem: AdminNavItemKey;
@@ -22,6 +62,19 @@ const NAV_ITEMS: Array<{
 
 export const AdminPortalNav = component$<AdminPortalNavProps>(({ activeItem }) => {
   const menuOpen = useSignal(false);
+  const userRoleLabel = useSignal("");
+  const userDisplayName = useSignal("");
+  const userEmail = useSignal("");
+  const userInitials = useSignal("");
+
+  useVisibleTask$(() => {
+    const u = getCurrentUser();
+    if (!u) return;
+    userRoleLabel.value = roleLabel(u.role);
+    userDisplayName.value = u.full_name?.trim() || u.email;
+    userEmail.value = u.email;
+    userInitials.value = initialsFromUser(u.full_name ?? "", u.email);
+  });
 
   const toggleMenu$ = $(() => {
     menuOpen.value = !menuOpen.value;
@@ -85,13 +138,14 @@ export const AdminPortalNav = component$<AdminPortalNavProps>(({ activeItem }) =
             <span class="material-symbols-outlined">help</span>
             <span>Support</span>
           </a>
-          <a
-            class="flex items-center gap-3 px-6 py-3 text-emerald-100/70 transition-colors duration-200 hover:text-white"
-            href="#"
+          <button
+            class="flex w-full items-center gap-3 px-6 py-3 text-left text-emerald-100/70 transition-colors duration-200 hover:text-white"
+            type="button"
+            onClick$={onLogout$}
           >
             <span class="material-symbols-outlined">logout</span>
             <span>Logout</span>
-          </a>
+          </button>
         </div>
       </aside>
 
@@ -131,18 +185,23 @@ export const AdminPortalNav = component$<AdminPortalNavProps>(({ activeItem }) =
 
           <div class="hidden h-8 w-px bg-emerald-900/10 sm:block" />
 
-          <div class="flex items-center gap-2 sm:gap-3">
-            <div class="hidden text-right sm:block">
-              <p class="text-[10px] font-bold uppercase leading-none tracking-wider text-emerald-900">
-                Admin Console
+          <div class="flex min-w-0 max-w-[14rem] items-center gap-2 sm:max-w-none sm:gap-3">
+            <div class="min-w-0 flex-1 text-right">
+              <p class="truncate text-[10px] font-bold uppercase leading-none tracking-wider text-emerald-900">
+                {userRoleLabel.value || "Administrator"}
               </p>
-              <p class="text-xs text-emerald-700/60">A. Chimutengwende</p>
+              <p class="truncate text-xs font-semibold text-emerald-800">{userDisplayName.value || "—"}</p>
+              {userEmail.value ? (
+                <p class="truncate text-[11px] text-emerald-700/70">{userEmail.value}</p>
+              ) : null}
             </div>
-            <img
-              alt="Administrator Profile"
-              class="h-10 w-10 rounded-full bg-emerald-100 object-cover"
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuDkYmqv7h8eJyi2E5NXEplpc0IJUvJx0J180bona3IyKV5KAOPfb1rfH4qqzre0sQoxSVgyhYW_1_WsrO-TLYod9KKzN9QP07yK3GyoJuRifFc77aAbtEBjRBE8vlvLvSML4oEUbkMC692IqG2nrRYYmydKRFFFZHucCvLD6rdv8nd2ja74REG_aszIr_jlxuazJELa5CzRmlDW0HJ13zxwdU6cN7mZrozLCa459QP7BTgRC-e7G-nOablroKELL4Pdty38WPqStFE"
-            />
+            <div
+              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white"
+              title={userDisplayName.value || undefined}
+              aria-label={userDisplayName.value ? `Signed in as ${userDisplayName.value}` : "User menu"}
+            >
+              {userInitials.value || "—"}
+            </div>
           </div>
         </div>
       </header>
@@ -210,7 +269,21 @@ export const AdminPortalNav = component$<AdminPortalNavProps>(({ activeItem }) =
             ))}
           </nav>
 
-          <div class="mt-8 px-6">
+          <div class="mt-6 flex items-center gap-3 border-t border-emerald-900/50 px-6 pt-6">
+            <div
+              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white"
+              aria-hidden="true"
+            >
+              {userInitials.value || "—"}
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-xs font-bold text-yellow-500">{userRoleLabel.value || "Administrator"}</p>
+              <p class="truncate text-sm font-semibold text-white">{userDisplayName.value || "—"}</p>
+              {userEmail.value ? <p class="truncate text-[11px] text-emerald-100/60">{userEmail.value}</p> : null}
+            </div>
+          </div>
+
+          <div class="mt-6 px-6">
             <button
               class="w-full rounded-xl bg-secondary-container py-3 text-sm font-bold text-on-secondary-container shadow-lg shadow-yellow-900/20 transition-all hover:scale-[1.02] active:scale-95"
               type="button"
@@ -227,13 +300,14 @@ export const AdminPortalNav = component$<AdminPortalNavProps>(({ activeItem }) =
               <span class="material-symbols-outlined">help</span>
               <span>Support</span>
             </a>
-            <a
-              class="flex items-center gap-3 px-6 py-3 text-emerald-100/70 transition-colors duration-200 hover:text-white"
-              href="#"
+            <button
+              class="flex w-full items-center gap-3 px-6 py-3 text-left text-emerald-100/70 transition-colors duration-200 hover:text-white"
+              type="button"
+              onClick$={onLogout$}
             >
               <span class="material-symbols-outlined">logout</span>
               <span>Logout</span>
-            </a>
+            </button>
           </div>
         </aside>
       </div>

@@ -10,10 +10,10 @@ export default component$(() => {
   const isRejected = decision === "rejected";
 
   return (
-    <div class="bg-background text-on-background min-h-screen">
+    <div class="flex flex-1 flex-col min-h-0 min-w-0 bg-background text-on-background">
       <ApproverPortalNav activeItem="archived" title="Official Approver Portal - Historical Review" />
 
-      <main class="min-h-screen">
+      <main class="flex-1 min-h-0 min-w-0 w-full">
         <div class="pt-24 px-4 pb-8 sm:px-6 sm:pb-12 lg:px-8">
           <header class="mb-6 rounded-xl bg-white/80 p-4 shadow-[0_20px_40px_rgba(0,0,0,0.04)] backdrop-blur-md sm:mb-10 sm:p-6">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">

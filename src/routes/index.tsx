@@ -1,11 +1,7 @@
 import { $, component$, useSignal, useTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
-import {
-  getCurrentUser,
-  signInMock,
-  signOutMock,
-  type AuthUser,
-} from "~/lib/auth";
+import { resolveApplicantPostLoginPath } from "~/lib/applicant-redirect";
+import { getCurrentUser, signIn, signOut, type AuthUser } from "~/lib/auth";
 
 export default component$(() => {
   const currentUser = useSignal<AuthUser | null>(null);
@@ -19,11 +15,11 @@ export default component$(() => {
     currentUser.value = getCurrentUser();
   });
 
-  const onSignIn$ = $(() => {
+  const onSignIn$ = $(async () => {
     error.value = null;
     busy.value = true;
 
-    const res = signInMock({
+    const res = await signIn({
       email: email.value,
       password: accessKey.value,
     });
@@ -35,8 +31,11 @@ export default component$(() => {
       return;
     }
 
-    currentUser.value = res.user;
-    // Stay on landing; the UI will update via currentUser signal.
+    const u = getCurrentUser();
+    if (u) {
+      const path = await resolveApplicantPostLoginPath(u);
+      window.location.assign(path);
+    }
   });
 
   return (
@@ -45,7 +44,8 @@ export default component$(() => {
         <div class="flex justify-between items-center max-w-7xl mx-auto px-8 h-full">
           <div class="flex items-center gap-8">
             <span class="text-2xl font-black tracking-tighter text-emerald-950 font-headline">
-              Zim Football Travel
+              <span class="md:hidden">ZFT</span>
+              <span class="hidden md:inline">Zim Football Travel</span>
             </span>
           </div>
 
@@ -61,10 +61,10 @@ export default component$(() => {
                 <button
                   type="button"
                   class="px-6 py-2.5 rounded-xl font-medium text-emerald-800/70 hover:bg-emerald-50/50 transition-all"
-                  onClick$={() => {
-                    signOutMock();
+                  onClick$={$(async () => {
+                    await signOut();
                     window.location.assign("/");
-                  }}
+                  })}
                 >
                   Sign out
                 </button>
@@ -390,10 +390,10 @@ export default component$(() => {
                   <button
                     type="button"
                     class="px-6 py-3 rounded-xl text-error font-bold hover:bg-error/5 transition-colors"
-                    onClick$={() => {
-                      signOutMock();
+                    onClick$={$(async () => {
+                      await signOut();
                       window.location.assign("/");
-                    }}
+                    })}
                   >
                     Terminate Session
                   </button>
@@ -427,38 +427,41 @@ export default component$(() => {
         </section>
       </main>
 
-      <footer class="bg-emerald-950 dark:bg-black w-full py-12 px-8">
-        <div class="flex flex-col md:flex-row justify-between items-center max-w-7xl mx-auto gap-6">
-          <div class="text-amber-500 font-bold font-['Inter'] text-sm tracking-wide uppercase">
+      <footer class="bg-emerald-950 dark:bg-black w-full box-border py-12 px-[clamp(1rem,4vw,2rem)] pb-[max(3rem,env(safe-area-inset-bottom,0px))]">
+        <div class="mx-auto flex w-full max-w-7xl min-w-0 flex-col items-center gap-6 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-x-6 md:gap-y-4">
+          <div class="w-full min-w-0 max-w-full text-center text-[clamp(0.65rem,2.8vw,0.875rem)] font-bold uppercase leading-snug tracking-wide text-amber-500 font-['Inter'] md:w-auto md:text-left md:text-sm">
             ZIMBABWE FOOTBALL TRAVEL AUTHORITY
           </div>
-          <div class="flex flex-wrap justify-center gap-8">
+          <nav
+            aria-label="Footer"
+            class="flex w-full min-w-0 max-w-full flex-wrap justify-center gap-x-[clamp(0.75rem,3vw,2rem)] gap-y-2 md:flex-1 md:justify-center"
+          >
             <a
-              class="text-emerald-200/50 hover:text-white font-['Inter'] text-sm tracking-wide uppercase hover:underline decoration-amber-500 underline-offset-4 transition-opacity duration-200"
+              class="shrink-0 text-emerald-200/50 hover:text-white font-['Inter'] text-[clamp(0.65rem,2.5vw,0.875rem)] tracking-wide uppercase hover:underline decoration-amber-500 underline-offset-4 transition-opacity duration-200 md:text-sm"
               href="#"
             >
               Privacy Policy
             </a>
             <a
-              class="text-emerald-200/50 hover:text-white font-['Inter'] text-sm tracking-wide uppercase hover:underline decoration-amber-500 underline-offset-4 transition-opacity duration-200"
+              class="shrink-0 text-emerald-200/50 hover:text-white font-['Inter'] text-[clamp(0.65rem,2.5vw,0.875rem)] tracking-wide uppercase hover:underline decoration-amber-500 underline-offset-4 transition-opacity duration-200 md:text-sm"
               href="#"
             >
               Terms of Service
             </a>
             <a
-              class="text-emerald-200/50 hover:text-white font-['Inter'] text-sm tracking-wide uppercase hover:underline decoration-amber-500 underline-offset-4 transition-opacity duration-200"
+              class="shrink-0 text-emerald-200/50 hover:text-white font-['Inter'] text-[clamp(0.65rem,2.5vw,0.875rem)] tracking-wide uppercase hover:underline decoration-amber-500 underline-offset-4 transition-opacity duration-200 md:text-sm"
               href="#"
             >
               Consular Services
             </a>
             <a
-              class="text-emerald-200/50 hover:text-white font-['Inter'] text-sm tracking-wide uppercase hover:underline decoration-amber-500 underline-offset-4 transition-opacity duration-200"
+              class="shrink-0 text-emerald-200/50 hover:text-white font-['Inter'] text-[clamp(0.65rem,2.5vw,0.875rem)] tracking-wide uppercase hover:underline decoration-amber-500 underline-offset-4 transition-opacity duration-200 md:text-sm"
               href="#"
             >
               FIFA Compliance
             </a>
-          </div>
-          <div class="text-emerald-200/50 font-['Inter'] text-xs tracking-wide uppercase text-center md:text-right">
+          </nav>
+          <div class="w-full min-w-0 text-center text-[clamp(0.6rem,2.2vw,0.75rem)] uppercase tracking-wide text-emerald-200/50 font-['Inter'] md:w-auto md:text-right md:text-xs">
             © 2026 Soxfort Solutions
           </div>
         </div>
