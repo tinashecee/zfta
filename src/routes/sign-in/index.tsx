@@ -16,7 +16,7 @@ export default component$(() => {
     currentUser.value = getCurrentUser();
     if (location.url.searchParams.get("error") === "approver") {
       error.value =
-        "Approver profile is missing a valid body (ZIFA, SRC, or IMMIGRATION). Please contact support.";
+        "Approver profile is missing a valid body (sport body code, SRC, or IMMIGRATION). Please contact support.";
     }
   });
 
@@ -49,7 +49,7 @@ export default component$(() => {
       <header class="fixed top-0 w-full z-50 bg-emerald-950/70 backdrop-blur-xl shadow-2xl shadow-emerald-950/20">
         <nav class="flex justify-between items-center px-8 py-4 max-w-full">
           <div class="text-xl font-bold text-white tracking-tighter font-headline">
-            Zimbabwe Football Travel Authority
+            Zimbabwe Sports Travel Authority
           </div>
 
           <div class="flex items-center gap-4">
@@ -238,7 +238,7 @@ export default component$(() => {
       <footer class="mt-auto bg-emerald-950 w-full shrink-0 py-12 px-8">
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div class="text-lg font-bold text-white font-headline">
-            Zimbabwe Football Travel Authority
+            Zimbabwe Sports Travel Authority
           </div>
           <div class="flex flex-wrap justify-center gap-8 font-body text-sm antialiased">
             <a class="text-emerald-200/60 hover:text-amber-400 transition-colors" href="#">

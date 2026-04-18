@@ -64,6 +64,7 @@ export function validateNewApplicationFormData(fd: FormData): string | null {
 export function validateApplicationPayload(application: Record<string, unknown>): string | null {
   const required: Array<{ key: string; label: string }> = [
     { key: "organisation_id", label: "Organisation" },
+    { key: "sport", label: "Sport" },
     { key: "event_type", label: "Event type" },
     { key: "event_display_name", label: "Event display name" },
     { key: "host_country", label: "Host country" },

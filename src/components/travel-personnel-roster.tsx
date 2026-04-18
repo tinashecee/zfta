@@ -3,7 +3,6 @@ import { downloadPersonnelTemplateXlsx, parsePersonnelExcelFile } from "~/lib/pe
 import {
   newPersonnelRow,
   PERSONNEL_GENDERS,
-  PERSONNEL_ROLES,
   PERSONNEL_STATUSES,
   type TravelPersonnelRow,
 } from "~/lib/travel-personnel-types";
@@ -95,9 +94,8 @@ export const TravelPersonnelRoster = component$<TravelPersonnelRosterProps>(({ p
               status
             </code>
             . Dates use <code class="text-[10px]">YYYY-MM-DD</code>. Gender: <code class="text-[10px]">male</code> or{" "}
-            <code class="text-[10px]">female</code>. Role: <code class="text-[10px]">player</code>,{" "}
-            <code class="text-[10px]">coach</code>, <code class="text-[10px]">medical</code>,{" "}
-            <code class="text-[10px]">admin</code>. Remove the sample row before upload.
+            <code class="text-[10px]">female</code>. Role is any label you use (use <code class="text-[10px]">player</code>{" "}
+            for squad members so player counts stay correct). Remove the sample row before upload.
             {isEdit ? " Uploading replaces listed rows only after you save the application." : ""}
           </p>
         </>
@@ -126,6 +124,7 @@ export const TravelPersonnelRoster = component$<TravelPersonnelRosterProps>(({ p
                 <th class="px-3 py-3">Role</th>
                 <th class="px-3 py-3">Position</th>
                 <th class="px-3 py-3">Passport</th>
+                <th class="px-3 py-3">Passport expiry</th>
                 <th class="px-3 py-3">Status</th>
                 {isView ? null : <th class="px-3 py-3 w-24" />}
               </tr>
@@ -141,6 +140,7 @@ export const TravelPersonnelRoster = component$<TravelPersonnelRosterProps>(({ p
                       <td class="px-3 py-2 align-top text-on-surface">{row.role}</td>
                       <td class="px-3 py-2 align-top text-on-surface">{row.position?.trim() || "—"}</td>
                       <td class="px-3 py-2 align-top text-on-surface">{row.passport_number?.trim() || "—"}</td>
+                      <td class="px-3 py-2 align-top text-on-surface">{row.passport_expiry?.trim() || "—"}</td>
                       <td class="px-3 py-2 align-top text-on-surface">{row.status ?? "active"}</td>
                     </>
                   ) : (
@@ -181,19 +181,15 @@ export const TravelPersonnelRoster = component$<TravelPersonnelRosterProps>(({ p
                         />
                       </td>
                       <td class="px-3 py-2 align-top">
-                        <select
+                        <input
                           class="w-full min-w-[100px] rounded-lg border-none bg-surface-container-highest px-2 py-1.5 text-on-surface"
+                          placeholder="e.g. player"
+                          type="text"
                           value={row.role}
-                          onChange$={(e) => {
-                            row.role = (e.target as HTMLSelectElement).value as TravelPersonnelRow["role"];
+                          onInput$={(e) => {
+                            row.role = (e.target as HTMLInputElement).value;
                           }}
-                        >
-                          {PERSONNEL_ROLES.map((r) => (
-                            <option key={r} value={r}>
-                              {r}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </td>
                       <td class="px-3 py-2 align-top">
                         <input
@@ -214,6 +210,16 @@ export const TravelPersonnelRoster = component$<TravelPersonnelRosterProps>(({ p
                           value={row.passport_number ?? ""}
                           onInput$={(e) => {
                             row.passport_number = (e.target as HTMLInputElement).value;
+                          }}
+                        />
+                      </td>
+                      <td class="px-3 py-2 align-top">
+                        <input
+                          class="w-full min-w-[120px] rounded-lg border-none bg-surface-container-highest px-2 py-1.5 text-on-surface"
+                          type="date"
+                          value={row.passport_expiry ?? ""}
+                          onInput$={(e) => {
+                            row.passport_expiry = (e.target as HTMLInputElement).value;
                           }}
                         />
                       </td>

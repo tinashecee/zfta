@@ -5,10 +5,18 @@ import { ApproverPortalNav } from "~/components/approver-portal-nav";
 import { listApplications } from "~/lib/applications-api";
 import { listApprovals } from "~/lib/approvals-api";
 import { getApiBaseUrl } from "~/lib/api";
-import { isLatestImmigrationTerminal, isLatestZifaApproved } from "~/lib/approver-approval-helpers";
+import { isLatestImmigrationTerminal, isLatestPrimaryBodyApproved } from "~/lib/approver-approval-helpers";
 import { getCurrentUser, normalizeApproverBody } from "~/lib/auth";
+import { reviewerRoutingBodyFromSession } from "~/lib/users-api";
 import { formatDateTime, labelEventType } from "~/lib/application-display";
 import { getOrganisationRowLabelsByIds } from "~/lib/organisations-api";
+import {
+  resolvePrimaryBodyFromOrgSport,
+  reviewerPrimaryCodesEqual,
+  routingSportForApplication,
+} from "~/lib/sport-routing";
+import { listSportBodies } from "~/lib/sport-bodies-api";
+import { listZimbabweSports } from "~/lib/zimbabwe-sports-api";
 
 type DashboardStatus =
   | "awaitingReview"
@@ -20,7 +28,7 @@ type DashboardStatus =
   | "rejected";
 type StatusFilter = "all" | DashboardStatus | "historical" | "overdue";
 
-type ApproverBody = "ZIFA" | "SRC" | "IMMIGRATION" | null;
+type ApproverBody = string | null;
 
 type ApplicationRecord = {
   id: string;
@@ -28,6 +36,8 @@ type ApplicationRecord = {
   priority: "URGENT" | "NORMAL";
   organization: string;
   organizationType: string;
+  /** Organisation `sport` when set. */
+  organizationSport?: string;
   event: string;
   destination: string;
   ageGroup: string;
@@ -49,7 +59,15 @@ type ApplicationRecord = {
 
 function apiStatusToDashboard(status: string | undefined): DashboardStatus {
   const s = (status ?? "").toLowerCase();
-  if (s === "awaiting_zifa" || s === "submitted") return "awaitingReview";
+  if (
+    s === "awaiting_body" ||
+    s === "awaiting_zifa" ||
+    s === "awaiting_primary_body" ||
+    s === "awaiting_sport_body" ||
+    s === "submitted"
+  ) {
+    return "awaitingReview";
+  }
   if (s === "awaiting_src" || s === "under_review") return "underReview";
   if (s === "information_requested") return "infoRequested";
   if (s === "awaiting_information") return "awaitingInformation";
@@ -67,7 +85,7 @@ function apiStatusToDashboard(status: string | undefined): DashboardStatus {
 
 const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "Status: All" },
-  { value: "awaitingReview", label: "Awaiting ZIFA" },
+  { value: "awaitingReview", label: "Awaiting sport body" },
   { value: "underReview", label: "Awaiting SRC" },
   { value: "infoRequested", label: "Info Requested" },
   { value: "awaitingInformation", label: "Awaiting Information" },
@@ -167,7 +185,7 @@ const getStatusPillClasses = (status: DashboardStatus) => {
 
 const getStatusLabel = (status: DashboardStatus, rawApiStatus?: string) => {
   if (status === "awaitingReview") {
-    return "Awaiting ZIFA";
+    return "Awaiting sport body";
   }
   if (status === "underReview") {
     return "Awaiting SRC";
@@ -213,7 +231,8 @@ function getApproverActionLabel(application: ApplicationRecord, body: ApproverBo
 function approverPortalTitle(body: ApproverBody): string {
   if (body === "SRC") return "Official Approver Portal - SRC Queue";
   if (body === "IMMIGRATION") return "Official Approver Portal - Immigration Queue";
-  return "Official Approver Portal - ZIFA Queue";
+  if (body) return `Official Approver Portal - ${body} Queue`;
+  return "Official Approver Portal";
 }
 
 export default component$(() => {
@@ -234,8 +253,6 @@ export default component$(() => {
       loadingApps.value = false;
       return;
     }
-    approverBody.value = normalizeApproverBody(u.body) as ApproverBody;
-    selectedStatus.value = resolveStatusFilterFromUrl(location.url.searchParams.get("status"), approverBody.value);
     const limit = 100;
     const offset = 0;
     const listUrl = `${getApiBaseUrl()}/api/v1/applications?limit=${limit}&offset=${offset}`;
@@ -274,6 +291,14 @@ export default component$(() => {
       console.table(fetchDebugRows);
     }
     const orgRows = await getOrganisationRowLabelsByIds(r.data.map((a) => a.organisation_id));
+    const [zsR, sbR] = await Promise.all([
+      listZimbabweSports({ limit: 200, offset: 0 }),
+      listSportBodies({ limit: 200, offset: 0 }),
+    ]);
+    const zs = zsR.ok ? zsR.data : [];
+    const sb = sbR.ok ? sbR.data : [];
+    approverBody.value = reviewerRoutingBodyFromSession(u, sb) as ApproverBody;
+    selectedStatus.value = resolveStatusFilterFromUrl(location.url.searchParams.get("status"), approverBody.value);
     const body = approverBody.value;
     const srcEligibility = new Map<string, boolean>();
     const immigrationEligibility = new Map<string, boolean>();
@@ -288,7 +313,14 @@ export default component$(() => {
         await Promise.all(
           batch.map(async (app) => {
             const appr = await listApprovals({ application_id: app.id, limit: 50, offset: 0 });
-            srcEligibility.set(app.id, appr.ok && isLatestZifaApproved(appr.data));
+            const orgId = app.organisation_id?.trim();
+            const orgRow = orgId ? orgRows.get(orgId) : undefined;
+            const primary = resolvePrimaryBodyFromOrgSport(
+              routingSportForApplication(app.sport, orgRow?.sport),
+              zs,
+              sb,
+            );
+            srcEligibility.set(app.id, appr.ok && isLatestPrimaryBodyApproved(appr.data, primary.code));
           }),
         );
       }
@@ -313,6 +345,11 @@ export default component$(() => {
     for (const app of r.data) {
       const orgId = app.organisation_id?.trim();
       const orgRow = orgId ? orgRows.get(orgId) : undefined;
+      const routeSport = routingSportForApplication(app.sport, orgRow?.sport);
+      if (body && body !== "SRC" && body !== "IMMIGRATION") {
+        const primary = resolvePrimaryBodyFromOrgSport(routeSport, zs, sb);
+        if (!reviewerPrimaryCodesEqual(primary.code, body)) continue;
+      }
       const st = apiStatusToDashboard(app.status);
       applications.push({
         id: app.id,
@@ -320,6 +357,7 @@ export default component$(() => {
         priority: (app.priority ?? "normal").toLowerCase() === "urgent" ? "URGENT" : "NORMAL",
         organization: orgId ? (orgRow?.name ?? "—") : "—",
         organizationType: orgId ? (orgRow?.orgType ?? "—") : "—",
+        organizationSport: orgId && routeSport ? routeSport : undefined,
         event: app.event_display_name ?? labelEventType(app.event_type) ?? "—",
         destination: app.host_country ?? "—",
         ageGroup: app.age_group != null && String(app.age_group).trim() !== "" ? String(app.age_group).trim() : "—",
@@ -367,7 +405,7 @@ export default component$(() => {
                 selectedStatus.value = "awaitingReview";
               }}
             >
-              <p class="text-[10px] uppercase tracking-widest font-bold text-outline mb-1">Awaiting ZIFA</p>
+              <p class="text-[10px] uppercase tracking-widest font-bold text-outline mb-1">Awaiting sport body</p>
               <div class="flex items-baseline gap-2">
                 <p class="text-3xl font-headline font-extrabold text-primary">{countForFilter(applications, "awaitingReview")}</p>
                 {countForFilter(applications, "awaitingReview") > 0 ? (
@@ -520,6 +558,11 @@ export default component$(() => {
                             <div class="flex min-w-0 flex-col gap-0.5 break-words whitespace-normal">
                               <span class="font-bold text-on-surface text-sm leading-snug">{application.organization}</span>
                               <span class="text-xs text-outline leading-snug">{application.organizationType}</span>
+                              {application.organizationSport ? (
+                                <span class="text-xs text-on-surface-variant leading-snug">
+                                  Sport: {application.organizationSport}
+                                </span>
+                              ) : null}
                             </div>
                           </td>
                           <td class="align-top px-3 py-3 max-w-[12rem] sm:max-w-none">

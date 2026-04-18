@@ -134,6 +134,11 @@ export default component$(() => {
       await setSubmitErrorWithFeedback("Add at least one traveller to the squad roster.");
       return;
     }
+    const emptyRole = personnel.find((r) => !String(r.role ?? "").trim());
+    if (emptyRole) {
+      await setSubmitErrorWithFeedback("Each traveller must have a role (e.g. player, coach).");
+      return;
+    }
     const user = getCurrentUser();
     if (!user?.id) {
       await setSubmitErrorWithFeedback("You must be signed in to submit.");
@@ -141,6 +146,7 @@ export default component$(() => {
     }
 
     let orgId: string;
+    let organisationSport = "";
     {
       const orgR = await getOrganisationForUser(user.id);
       if (!orgR.ok) {
@@ -157,6 +163,14 @@ export default component$(() => {
         await setSubmitErrorWithFeedback("Organisation ID is missing. Please update your organisation profile.");
         return;
       }
+      organisationSport = String(orgR.organisation.sport ?? "").trim().slice(0, 255);
+    }
+
+    if (!organisationSport) {
+      await setSubmitErrorWithFeedback(
+        "Your organisation profile must include a sport before you can submit. Update your organisation profile, then try again.",
+      );
+      return;
     }
 
     submitBusy.value = true;
@@ -198,9 +212,10 @@ export default component$(() => {
 
     const application = buildApplicationRecordFromForm(fd, {
       organisation_id: orgId,
+      sport: organisationSport,
       support_documents: up.data.support_documents,
       travel_documents: up.data.travel_documents,
-      status: "awaiting_zifa",
+      status: "awaiting_body",
     });
 
     const roleCounts = personnelRoleCountsForApplication(personnel);
@@ -781,7 +796,7 @@ export default component$(() => {
       <footer class="bg-emerald-950 w-full py-12 px-8">
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div class="text-lg font-bold text-white font-headline">
-            Zimbabwe Football Travel Authority
+            Zimbabwe Sports Travel Authority
           </div>
           <div class="flex flex-wrap justify-center gap-8 font-body text-sm antialiased">
             <a class="text-emerald-200/60 hover:text-amber-400 transition-colors" href="#">

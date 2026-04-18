@@ -2,7 +2,7 @@ import { component$, Slot, useVisibleTask$ } from "@builder.io/qwik";
 import {
   getCurrentUser,
   redirectPathIfWrongRole,
-  isValidReviewerBody,
+  reviewerHasValidApproverProfile,
 } from "~/lib/auth";
 
 export default component$(() => {
@@ -13,7 +13,7 @@ export default component$(() => {
       window.location.assign(path);
       return;
     }
-    if (u?.role === "reviewer" && !isValidReviewerBody(u.body)) {
+    if (u?.role === "reviewer" && !reviewerHasValidApproverProfile(u)) {
       window.location.assign("/sign-in/?error=approver");
     }
   });
@@ -23,7 +23,7 @@ export default component$(() => {
       <Slot />
       <footer class="mt-auto bg-emerald-950 w-full py-12 px-8">
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div class="text-lg font-bold text-white font-headline">Zimbabwe Football Travel Authority</div>
+          <div class="text-lg font-bold text-white font-headline">Zimbabwe Sports Travel Authority</div>
           <div class="flex flex-wrap justify-center gap-8 font-body text-sm antialiased">
             <a class="text-emerald-200/60 hover:text-amber-400 transition-colors" href="#">
               Privacy Policy

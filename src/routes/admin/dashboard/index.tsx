@@ -44,7 +44,7 @@ export default component$(() => {
                 Overview
               </h2>
               <p class="mt-1 text-sm text-on-surface-variant sm:text-base">
-                Zimbabwe Football Travel Authority — admin console
+                Zimbabwe Sports Travel Authority — admin console
               </p>
             </div>
             <a
@@ -115,5 +115,5 @@ export default component$(() => {
 });
 
 export const head: DocumentHead = {
-  title: "ZFTA Admin Console | Overview",
+  title: "ZSTA Admin Console | Overview",
 };

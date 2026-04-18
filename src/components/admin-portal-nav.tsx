@@ -1,7 +1,13 @@
 import { $, component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
 import { getCurrentUser, signOut } from "~/lib/auth";
 
-type AdminNavItemKey = "overview" | "accounts" | "systemUsers" | "applications" | "settings";
+type AdminNavItemKey =
+  | "overview"
+  | "accounts"
+  | "systemUsers"
+  | "sportBodies"
+  | "applications"
+  | "settings";
 
 function roleLabel(role: string): string {
   switch (role) {
@@ -56,6 +62,7 @@ const NAV_ITEMS: Array<{
   { key: "overview", label: "Overview", icon: "dashboard", href: "/admin/dashboard/", filled: true },
   { key: "accounts", label: "Accounts", icon: "group", href: "/admin/accounts/" },
   { key: "systemUsers", label: "System Users", icon: "manage_accounts", href: "/admin/system-users/" },
+  { key: "sportBodies", label: "Sport bodies", icon: "groups", href: "/admin/sport-bodies/" },
   { key: "applications", label: "Applications", icon: "fact_check", href: "#" },
   { key: "settings", label: "System Settings", icon: "settings", href: "#" },
 ];
@@ -94,7 +101,7 @@ export const AdminPortalNav = component$<AdminPortalNavProps>(({ activeItem }) =
             </span>
           </div>
           <div>
-            <h1 class="text-xl font-bold tracking-tighter text-yellow-500">ZFTA Admin</h1>
+            <h1 class="text-xl font-bold tracking-tighter text-yellow-500">ZSTA Admin</h1>
             <p class="text-[10px] uppercase tracking-widest text-emerald-100/50">Government Authority</p>
           </div>
         </div>
@@ -232,7 +239,7 @@ export const AdminPortalNav = component$<AdminPortalNavProps>(({ activeItem }) =
                 </span>
               </div>
               <div>
-                <h1 class="text-xl font-bold tracking-tighter text-yellow-500">ZFTA Admin</h1>
+                <h1 class="text-xl font-bold tracking-tighter text-yellow-500">ZSTA Admin</h1>
                 <p class="text-[10px] uppercase tracking-widest text-emerald-100/50">Government Authority</p>
               </div>
             </div>

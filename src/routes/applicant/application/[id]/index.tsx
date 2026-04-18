@@ -26,6 +26,9 @@ import {
 } from "~/lib/certificates-api";
 import { getCurrentUser } from "~/lib/auth";
 import { getOrganisation, organisationDisplayName } from "~/lib/organisations-api";
+import { resolvePrimaryBodyFromOrgSport, routingSportForApplication } from "~/lib/sport-routing";
+import { listSportBodies } from "~/lib/sport-bodies-api";
+import { listZimbabweSports } from "~/lib/zimbabwe-sports-api";
 import { apiPersonnelToRow, type TravelPersonnelRow } from "~/lib/travel-personnel-types";
 
 type CertPhase = "skip" | "loading" | "missing" | "present";
@@ -66,6 +69,8 @@ export default component$(() => {
   const approvals = useSignal<ApiApproval[]>([]);
   const approvalsLoadError = useSignal<string | null>(null);
   const organisationName = useSignal<string>("");
+  const organisationSport = useSignal<string>("");
+  const primaryStake = useSignal<{ code: string; label: string }>({ code: "ZIFA", label: "ZIFA" });
   const personnel = useStore<TravelPersonnelRow[]>([]);
 
   const certPhase = useSignal<CertPhase>("skip");
@@ -83,6 +88,8 @@ export default component$(() => {
     approvals.value = [];
     approvalsLoadError.value = null;
     organisationName.value = "";
+    organisationSport.value = "";
+    primaryStake.value = { code: "ZIFA", label: "ZIFA" };
     certPhase.value = "skip";
     certData.value = null;
     certGenerateError.value = null;
@@ -108,7 +115,23 @@ export default component$(() => {
     if (oid) {
       const orgR = await getOrganisation(oid);
       organisationName.value = orgR.ok ? organisationDisplayName(orgR.data) || "—" : "—";
+      if (orgR.ok) {
+        const sp = orgR.data.sport;
+        organisationSport.value =
+          sp != null && String(sp).trim() !== "" ? String(sp).trim() : "";
+      }
     }
+
+    const [zsR, sbR] = await Promise.all([
+      listZimbabweSports({ limit: 200, offset: 0 }),
+      listSportBodies({ limit: 200, offset: 0 }),
+    ]);
+    const resolved = resolvePrimaryBodyFromOrgSport(
+      routingSportForApplication(appR.data.sport, organisationSport.value),
+      zsR.ok ? zsR.data : [],
+      sbR.ok ? sbR.data : [],
+    );
+    primaryStake.value = { code: resolved.code, label: resolved.label };
 
     if (!apprR.ok) {
       approvalsLoadError.value = apprR.error;
@@ -117,7 +140,9 @@ export default component$(() => {
     }
 
     const statusLower = (appR.data.status ?? "").trim().toLowerCase();
-    if (statusLower === "approved") {
+    const showCertificateSection =
+      statusLower === "approved" || statusLower === "certificate_issued";
+    if (showCertificateSection) {
       certPhase.value = "loading";
       const cr = await getApplicationCertificate(id);
       if (cr.ok && cr.data != null) {
@@ -130,7 +155,7 @@ export default component$(() => {
   });
 
   const app = application.value;
-  const governance = app ? governanceFromApprovals(app.status, approvals.value) : null;
+  const governance = app ? governanceFromApprovals(app.status, approvals.value, primaryStake.value) : null;
 
   return (
     <div class="bg-background font-body text-on-surface min-h-screen">
@@ -173,10 +198,17 @@ export default component$(() => {
                   {str(app.event_display_name) || "Travel application"}
                 </h1>
                 {organisationName.value ? (
-                  <p class="text-on-surface-variant flex items-center gap-2 flex-wrap mb-2">
-                    <span class="material-symbols-outlined text-lg text-secondary">domain</span>
-                    <span class="font-semibold text-on-surface">{organisationName.value}</span>
-                  </p>
+                  <div class="mb-2">
+                    <p class="text-on-surface-variant flex items-center gap-2 flex-wrap">
+                      <span class="material-symbols-outlined text-lg text-secondary">domain</span>
+                      <span class="font-semibold text-on-surface">{organisationName.value}</span>
+                    </p>
+                    {organisationSport.value ? (
+                      <p class="text-sm text-on-surface-variant mt-1 pl-8">
+                        Sport: <span class="font-medium text-on-surface">{organisationSport.value}</span>
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
                 <p class="text-on-surface-variant flex items-center gap-2 flex-wrap">
                   <span class="material-symbols-outlined text-lg text-secondary">flight_takeoff</span>
@@ -378,69 +410,18 @@ export default component$(() => {
                       </p>
                     ) : certPhase.value === "missing" ? (
                       <div class="space-y-3">
-                        <p class="text-sm text-on-surface-variant leading-relaxed">
-                          No certificate is on file yet. Generate one for your approved application.
-                        </p>
-                        {certGenerateError.value ? (
-                          <p class="text-xs text-error" role="alert">
-                            {certGenerateError.value}
+                        {(app.status ?? "").trim().toLowerCase() === "certificate_issued" ? (
+                          <p class="text-sm text-on-surface-variant leading-relaxed">
+                            Your certificate could not be loaded. Refresh the page or contact support if this continues.
                           </p>
-                        ) : null}
-                        <button
-                          type="button"
-                          class="inline-flex items-center justify-center gap-2 w-full rounded-lg border border-primary/30 bg-primary/10 px-4 py-2.5 text-sm font-bold text-primary hover:bg-primary/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          disabled={certActionLoading.value}
-                          onClick$={async () => {
-                            certGenerateError.value = null;
-                            const org = organisationName.value.trim();
-                            if (!org || org === "—") {
-                              certGenerateError.value =
-                                "Organisation name is required to generate a certificate. It will load from your profile.";
-                              return;
-                            }
-                            const uid = getCurrentUser()?.id?.trim() ?? "";
-                            if (!uid) {
-                              certGenerateError.value = "You must be signed in to generate a certificate.";
-                              return;
-                            }
-                            certActionLoading.value = true;
-                            const postR = await createCertificate({
-                              application_id: id,
-                              org_name: org,
-                              user_id: uid,
-                            });
-                            certActionLoading.value = false;
-                            if (!postR.ok) {
-                              certGenerateError.value = postR.error;
-                              return;
-                            }
-                            const fromPost = certificateFileNameFromRecord(postR.data);
-                            if (fromPost && postR.data) {
-                              certData.value = postR.data;
-                              certPhase.value = "present";
-                              return;
-                            }
-                            const again = await getApplicationCertificate(id);
-                            if (again.ok && again.data != null) {
-                              certData.value = again.data;
-                              certPhase.value = "present";
-                            } else {
-                              certGenerateError.value =
-                                "Certificate may have been created but could not be confirmed. Refresh the page.";
-                            }
-                          }}
-                        >
-                          <span class="material-symbols-outlined text-base">add_circle</span>
-                          {certActionLoading.value ? "Generating…" : "Generate certificate"}
-                        </button>
-                      </div>
-                    ) : (
-                      <div class="space-y-3">
-                        {hasCertificateOpenableFile(certData.value) ? (
+                        ) : (
                           <>
-                            {certViewError.value ? (
+                            <p class="text-sm text-on-surface-variant leading-relaxed">
+                              No certificate is on file yet. Generate one for your approved application.
+                            </p>
+                            {certGenerateError.value ? (
                               <p class="text-xs text-error" role="alert">
-                                {certViewError.value}
+                                {certGenerateError.value}
                               </p>
                             ) : null}
                             <button
@@ -448,35 +429,98 @@ export default component$(() => {
                               class="inline-flex items-center justify-center gap-2 w-full rounded-lg border border-primary/30 bg-primary/10 px-4 py-2.5 text-sm font-bold text-primary hover:bg-primary/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               disabled={certActionLoading.value}
                               onClick$={async () => {
-                                certViewError.value = null;
+                                certGenerateError.value = null;
+                                const org = organisationName.value.trim();
+                                if (!org || org === "—") {
+                                  certGenerateError.value =
+                                    "Organisation name is required to generate a certificate. It will load from your profile.";
+                                  return;
+                                }
+                                const uid = getCurrentUser()?.id?.trim() ?? "";
+                                if (!uid) {
+                                  certGenerateError.value = "You must be signed in to generate a certificate.";
+                                  return;
+                                }
                                 certActionLoading.value = true;
-                                const r = await fetchCertificatePdfBlob(certData.value);
+                                const postR = await createCertificate({
+                                  application_id: id,
+                                  org_name: org,
+                                  user_id: uid,
+                                });
                                 certActionLoading.value = false;
-                                if (!r.ok) {
-                                  certViewError.value = r.error;
+                                if (!postR.ok) {
+                                  certGenerateError.value = postR.error;
                                   return;
                                 }
-                                const url = URL.createObjectURL(r.blob);
-                                const w = window.open(url, "_blank", "noopener,noreferrer");
-                                if (!w) {
-                                  certViewError.value =
-                                    "Could not open a new tab. Allow pop-ups for this site or try again.";
-                                  URL.revokeObjectURL(url);
+                                const fromPost = certificateFileNameFromRecord(postR.data);
+                                if (fromPost && postR.data) {
+                                  certData.value = postR.data;
+                                  certPhase.value = "present";
                                   return;
                                 }
-                                window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
+                                const again = await getApplicationCertificate(id);
+                                if (again.ok && again.data != null) {
+                                  certData.value = again.data;
+                                  certPhase.value = "present";
+                                } else {
+                                  certGenerateError.value =
+                                    "Certificate may have been created but could not be confirmed. Refresh the page.";
+                                }
                               }}
                             >
-                              <span class="material-symbols-outlined text-base">open_in_new</span>
-                              {certActionLoading.value ? "Opening…" : "View certificate"}
+                              <span class="material-symbols-outlined text-base">add_circle</span>
+                              {certActionLoading.value ? "Generating…" : "Generate certificate"}
                             </button>
                           </>
-                        ) : (
-                          <p class="text-sm text-on-surface-variant leading-relaxed">
-                            A certificate record exists, but no file name or file path was returned. Try refreshing the
-                            page or contact support.
-                          </p>
                         )}
+                      </div>
+                    ) : (
+                      <div class="space-y-3">
+                        {certData.value != null && !hasCertificateOpenableFile(certData.value) ? (
+                          <p class="text-sm text-on-surface-variant leading-relaxed">
+                            If the PDF does not open, we will try to reload certificate details from the server.
+                          </p>
+                        ) : null}
+                        {certViewError.value ? (
+                          <p class="text-xs text-error" role="alert">
+                            {certViewError.value}
+                          </p>
+                        ) : null}
+                        <button
+                          type="button"
+                          class="inline-flex items-center justify-center gap-2 w-full rounded-lg border border-primary/30 bg-primary/10 px-4 py-2.5 text-sm font-bold text-primary hover:bg-primary/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={certActionLoading.value}
+                          onClick$={async () => {
+                            certViewError.value = null;
+                            certActionLoading.value = true;
+                            let cert = certData.value;
+                            if (cert != null && !hasCertificateOpenableFile(cert)) {
+                              const refresh = await getApplicationCertificate(id);
+                              if (refresh.ok && refresh.data != null) {
+                                certData.value = refresh.data;
+                                cert = refresh.data;
+                              }
+                            }
+                            const r = await fetchCertificatePdfBlob(cert);
+                            certActionLoading.value = false;
+                            if (!r.ok) {
+                              certViewError.value = r.error;
+                              return;
+                            }
+                            const url = URL.createObjectURL(r.blob);
+                            const w = window.open(url, "_blank", "noopener,noreferrer");
+                            if (!w) {
+                              certViewError.value =
+                                "Could not open a new tab. Allow pop-ups for this site or try again.";
+                              URL.revokeObjectURL(url);
+                              return;
+                            }
+                            window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
+                          }}
+                        >
+                          <span class="material-symbols-outlined text-base">open_in_new</span>
+                          {certActionLoading.value ? "Opening…" : "View certificate"}
+                        </button>
                       </div>
                     )}
                   </div>
@@ -493,7 +537,7 @@ export default component$(() => {
                     </div>
                     <div class="min-w-0 flex-1">
                       <p class="text-xs font-bold text-on-surface-variant uppercase tracking-wide">Liaison</p>
-                      <p class="text-sm font-medium text-on-surface">ZFTA support desk</p>
+                      <p class="text-sm font-medium text-on-surface">ZSTA support desk</p>
                     </div>
                     <a
                       class="material-symbols-outlined text-secondary hover:text-primary transition-colors p-2"
@@ -534,6 +578,12 @@ export default component$(() => {
                     <div class="grid sm:grid-cols-3 gap-1">
                       <dt class="text-on-surface-variant">Event type</dt>
                       <dd class="sm:col-span-2">{labelEventType(app.event_type)}</dd>
+                    </div>
+                    <div class="grid sm:grid-cols-3 gap-1">
+                      <dt class="text-on-surface-variant">Sport</dt>
+                      <dd class="sm:col-span-2">
+                        {routingSportForApplication(app.sport, organisationSport.value) || "—"}
+                      </dd>
                     </div>
                     <div class="grid sm:grid-cols-3 gap-1">
                       <dt class="text-on-surface-variant">Host country</dt>
@@ -679,5 +729,5 @@ export default component$(() => {
 });
 
 export const head: DocumentHead = {
-  title: "Application Detail | Zimbabwe Football Travel Authority",
+  title: "Application Detail | Zimbabwe Sports Travel Authority",
 };

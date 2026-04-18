@@ -61,7 +61,7 @@ export default component$(() => {
                   </div>
                 </div>
                 <div class="inline-block w-full rounded-xl bg-surface-container px-4 py-2 text-xs font-medium text-on-surface-variant md:w-auto">
-                  Closed on <span class="text-primary font-bold">14 Feb 2025</span> by ZFTA-ADMIN-04
+                  Closed on <span class="text-primary font-bold">14 Feb 2025</span> by ZSTA-ADMIN-04
                 </div>
               </div>
             </div>
@@ -301,7 +301,7 @@ export default component$(() => {
                     <div class="absolute left-0 top-1 w-6 h-6 rounded-full bg-primary flex items-center justify-center ring-4 ring-white">
                       <span class="material-symbols-outlined text-white text-[14px]">task_alt</span>
                     </div>
-                    <div class="text-xs font-bold text-primary mb-1">ZFTA REVIEWER • 13 Feb 2025, 10:05 AM</div>
+                    <div class="text-xs font-bold text-primary mb-1">ZSTA REVIEWER • 13 Feb 2025, 10:05 AM</div>
                     <div class="bg-surface-container-low p-3 rounded-lg text-sm text-on-surface">
                       Final verification review completed and archived for audit reference.
                     </div>
@@ -352,7 +352,7 @@ export default component$(() => {
                       <span class="material-symbols-outlined text-sm">{isRejected ? "cancel" : "verified"}</span>
                       {isRejected ? "Rejected" : "Approved"}
                     </span>
-                    <span class="text-xs text-white/60">14 Feb 2025 • ZFTA-ADMIN-04</span>
+                    <span class="text-xs text-white/60">14 Feb 2025 • ZSTA-ADMIN-04</span>
                   </div>
                 </div>
 

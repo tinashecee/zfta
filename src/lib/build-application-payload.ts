@@ -7,7 +7,14 @@ export function buildApplicationRecordFromForm(
     organisation_id: string;
     support_documents: string | null;
     travel_documents: string | null;
-    status?: "draft" | "awaiting_zifa";
+    /** When set (e.g. copied from organisation profile), sent as `sport` on the application. */
+    sport?: string | null;
+    status?:
+      | "draft"
+      | "awaiting_body"
+      | "awaiting_zifa"
+      | "awaiting_primary_body"
+      | "awaiting_sport_body";
   },
 ): Record<string, unknown> {
   const event_type = String(fd.get("event_type") ?? "tournament").trim();
@@ -28,6 +35,10 @@ export function buildApplicationRecordFromForm(
   const opponent_team_name = String(fd.get("opponent_team_name") ?? "").trim() || null;
   const opponent_team_country = String(fd.get("opponent_team_country") ?? "").trim() || null;
   const event_display_name_custom = String(fd.get("event_display_name") ?? "").trim();
+  const sport =
+    opts.sport !== undefined
+      ? String(opts.sport ?? "").trim().slice(0, 255) || null
+      : String(fd.get("sport") ?? "").trim().slice(0, 255) || null;
 
   const tn = tournament_name || "Other";
   const event_display_name = (() => {
@@ -42,6 +53,7 @@ export function buildApplicationRecordFromForm(
 
   return {
     organisation_id: String(opts.organisation_id).trim(),
+    sport,
     event_type,
     tournament_name: tn === "Other" ? "Other" : tn,
     tournament_name_other: tn === "Other" ? tournament_name_other : null,
@@ -65,7 +77,7 @@ export function buildApplicationRecordFromForm(
     declaration_accepted,
     support_documents: opts.support_documents,
     travel_documents: opts.travel_documents,
-    status: opts.status ?? "awaiting_zifa",
+    status: opts.status ?? "awaiting_body",
     priority: "normal",
   };
 }

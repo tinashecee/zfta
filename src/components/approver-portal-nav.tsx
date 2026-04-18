@@ -1,7 +1,9 @@
 import { $, component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
-import { getCurrentUser, normalizeApproverBody, signOut } from "~/lib/auth";
+import { getCurrentUser, signOut } from "~/lib/auth";
+import { resolveSportBodyRowForReviewerUser, reviewerPortalAffiliationLabel } from "~/lib/users-api";
+import { listSportBodies, sportBodyApprovalCode } from "~/lib/sport-bodies-api";
 
-type ApproverNavItemKey = "dashboard" | "pendingQueue" | "approved" | "archived" | "systemLogs";
+type ApproverNavItemKey = "dashboard" | "pendingQueue" | "approved" | "archived" | "systemLogs" | "account";
 
 type ApproverPortalNavProps = {
   activeItem: ApproverNavItemKey;
@@ -20,14 +22,32 @@ const NAV_ITEMS: Array<{
   { key: "approved", label: "Approved", icon: "verified_user", href: "/approver/dashboard/?status=approved", filled: true },
   { key: "archived", label: "Archived", icon: "archive", href: "/approver/dashboard/?status=historical" },
   { key: "systemLogs", label: "System Logs", icon: "settings_suggest", href: "#" },
+  { key: "account", label: "My account", icon: "manage_accounts", href: "/approver/account/" },
 ];
 
 export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeItem, title }) => {
   const menuOpen = useSignal(false);
-  const bodyLabel = useSignal<string | null>(null);
+  const affiliationPrimary = useSignal<string | null>(null);
+  const affiliationSecondary = useSignal<string | null>(null);
 
-  useVisibleTask$(() => {
-    bodyLabel.value = normalizeApproverBody(getCurrentUser()?.body);
+  // eslint-disable-next-line qwik/no-use-visible-task
+  useVisibleTask$(async () => {
+    const u = getCurrentUser();
+    const r = await listSportBodies({ limit: 200, offset: 0 });
+    const sb = r.ok ? r.data : [];
+    affiliationPrimary.value = reviewerPortalAffiliationLabel(u, sb);
+    const row = resolveSportBodyRowForReviewerUser(u, sb);
+    if (row) {
+      const code = sportBodyApprovalCode(row);
+      const name = (row.name ?? "").trim();
+      if (name && code.toUpperCase() !== name.toUpperCase()) {
+        affiliationSecondary.value = code;
+      } else {
+        affiliationSecondary.value = null;
+      }
+    } else {
+      affiliationSecondary.value = null;
+    }
   });
 
   const toggleMenu$ = $(() => {
@@ -56,9 +76,14 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
             menu
           </button>
           <div class="flex min-w-0 max-w-[11rem] flex-col sm:max-w-[18rem] lg:max-w-none">
-            {bodyLabel.value ? (
-              <span class="font-manrope text-[10px] font-bold uppercase tracking-widest text-amber-400">
-                {bodyLabel.value}
+            {affiliationPrimary.value ? (
+              <span class="font-manrope text-[10px] font-bold uppercase tracking-widest text-amber-400 leading-tight">
+                {affiliationPrimary.value}
+                {affiliationSecondary.value ? (
+                  <span class="block normal-case tracking-normal text-emerald-200/70 font-semibold mt-0.5">
+                    {affiliationSecondary.value}
+                  </span>
+                ) : null}
               </span>
             ) : null}
             <h2 class="truncate font-manrope text-sm font-bold tracking-tighter text-white sm:text-base lg:text-xl">
@@ -86,13 +111,13 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
             >
               notifications
             </button>
-            <button
+            <a
               class="flex items-center gap-2 rounded-full p-1 pr-2 transition-all duration-300 hover:bg-emerald-800/50 sm:pr-3"
-              type="button"
+              href="/approver/account/"
             >
               <span class="material-symbols-outlined">account_circle</span>
-              <span class="hidden text-sm font-medium sm:inline">Approver Portal</span>
-            </button>
+              <span class="hidden text-sm font-medium sm:inline">My account</span>
+            </a>
           </div>
         </div>
       </header>
@@ -120,7 +145,7 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
               <div>
                 <h1 class="text-lg font-black text-white uppercase tracking-tighter">Travel Authority</h1>
                 <p class="font-manrope uppercase tracking-widest text-[11px] text-amber-400/90">
-                  {bodyLabel.value ? `${bodyLabel.value} · ` : ""}
+                  {affiliationPrimary.value ? `${affiliationPrimary.value} · ` : ""}
                   Approver
                 </p>
                 <p class="font-manrope uppercase tracking-widest text-[11px] text-emerald-100/50">

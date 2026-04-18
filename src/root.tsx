@@ -3,6 +3,7 @@ import { QwikCityProvider, RouterOutlet } from "@builder.io/qwik-city";
 import { RouterHead } from "./components/router-head/router-head";
 
 import "./global.css";
+import { themeBootstrapInlineScript } from "~/lib/theme";
 
 export default component$(() => {
   /**
@@ -33,6 +34,7 @@ export default component$(() => {
           rel="stylesheet"
         />
         <RouterHead />
+        <script dangerouslySetInnerHTML={themeBootstrapInlineScript()} />
       </head>
       <body lang="en">
         <RouterOutlet />

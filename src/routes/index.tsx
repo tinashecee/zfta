@@ -45,7 +45,7 @@ export default component$(() => {
           <div class="flex items-center gap-8">
             <span class="text-2xl font-black tracking-tighter text-emerald-950 font-headline">
               <span class="md:hidden">ZFT</span>
-              <span class="hidden md:inline">Zim Football Travel</span>
+              <span class="hidden md:inline">Zim Sports Travel</span>
             </span>
           </div>
 
@@ -471,7 +471,7 @@ export default component$(() => {
 });
 
 export const head: DocumentHead = {
-  title: "Zimbabwe Football Travel Authority",
+  title: "Zimbabwe Sports Travel Authority",
   meta: [
     {
       name: "description",

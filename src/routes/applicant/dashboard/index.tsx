@@ -435,7 +435,7 @@ export default component$(() => {
       <footer class="mt-auto bg-emerald-950 w-full shrink-0 py-12 px-8">
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div class="text-lg font-bold text-white font-headline">
-            Zimbabwe Football Travel Authority
+            Zimbabwe Sports Travel Authority
           </div>
           <div class="flex flex-wrap justify-center gap-8 font-body text-sm antialiased">
             <a class="text-emerald-200/60 hover:text-amber-400 transition-colors" href="#">

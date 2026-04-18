@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Manual dark mode via `class="dark"` on `<html>` (see `~/lib/theme`). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Tailwind v4 CSS-first theme tokens.
    This ensures classes like `bg-primary` / `text-on-background` are generated. */
 @theme {
@@ -59,6 +62,62 @@
   --color-inverse-surface: #2e3130;
   --color-inverse-on-surface: #f0f1ef;
   --color-inverse-primary: #97d4a7;
+}
+
+/* Dark palette — overrides semantic tokens when `html.dark` is set. */
+.dark {
+  --color-primary: #97d4a7;
+  --color-on-primary: #003913;
+  --color-primary-container: #1c4d2a;
+  --color-primary-fixed: #b3f1c2;
+  --color-primary-fixed-dim: #97d4a7;
+  --color-on-primary-fixed: #002101;
+  --color-on-primary-container: #b3f1c2;
+  --color-on-primary-fixed-variant: #c5e8c9;
+
+  --color-secondary: #ecc200;
+  --color-secondary-container: #564500;
+  --color-on-secondary-container: #ffe07c;
+  --color-secondary-fixed: #ffe07c;
+  --color-secondary-fixed-dim: #ecc200;
+  --color-on-secondary-fixed: #231b00;
+  --color-secondary-fixed-variant: #564500;
+  --color-on-secondary-fixed-variant: #564500;
+
+  --color-tertiary: #ffb4a8;
+  --color-tertiary-container: #93000a;
+  --color-tertiary-fixed: #ffdad4;
+  --color-tertiary-fixed-dim: #ffb4a8;
+  --color-on-tertiary: #561a00;
+  --color-on-tertiary-container: #ffdad4;
+  --color-on-tertiary-fixed: #410000;
+  --color-on-tertiary-fixed-variant: #ffb4a8;
+
+  --color-background: #121412;
+  --color-on-background: #e1e3e1;
+  --color-on-surface: #e1e3e1;
+  --color-on-surface-variant: #bfc9bf;
+
+  --color-surface: #121412;
+  --color-surface-variant: #3f4943;
+  --color-surface-container: #1c211e;
+  --color-surface-container-low: #181d1a;
+  --color-surface-container-high: #252b27;
+  --color-surface-container-highest: #303633;
+  --color-surface-container-lowest: #0f1411;
+  --color-surface-bright: #363d38;
+  --color-surface-dim: #121412;
+
+  --color-outline: #899286;
+  --color-outline-variant: #404941;
+
+  --color-error: #ffb4ab;
+  --color-error-container: #93000a;
+  --color-on-error-container: #ffdad6;
+
+  --color-inverse-surface: #e1e3e1;
+  --color-inverse-on-surface: #191c1b;
+  --color-inverse-primary: #4b8f5c;
 }
 
 /* Small app-wide defaults */

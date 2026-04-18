@@ -1,6 +1,6 @@
 /** Excel template + parsing for travel personnel (SheetJS). */
-import type { PersonnelGender, PersonnelRole, PersonnelStatus, TravelPersonnelInput } from "~/lib/travel-personnel-types";
-import { PERSONNEL_GENDERS, PERSONNEL_ROLES, PERSONNEL_STATUSES } from "~/lib/travel-personnel-types";
+import type { PersonnelGender, PersonnelStatus, TravelPersonnelInput } from "~/lib/travel-personnel-types";
+import { PERSONNEL_GENDERS, PERSONNEL_STATUSES } from "~/lib/travel-personnel-types";
 
 export const PERSONNEL_TEMPLATE_FILENAME = "zfta-personnel-template.xlsx";
 
@@ -31,13 +31,6 @@ function normalizeGender(v: unknown): PersonnelGender | null {
   if (s === "male" || s === "m") return "male";
   if (s === "female" || s === "f") return "female";
   return PERSONNEL_GENDERS.includes(s as PersonnelGender) ? (s as PersonnelGender) : null;
-}
-
-function normalizeRole(v: unknown): PersonnelRole | null {
-  const s = String(v ?? "")
-    .trim()
-    .toLowerCase();
-  return PERSONNEL_ROLES.includes(s as PersonnelRole) ? (s as PersonnelRole) : null;
 }
 
 function normalizeStatus(v: unknown): PersonnelStatus | null {
@@ -109,8 +102,8 @@ function rowToPersonnel(row: Record<string, unknown>, rowIndex: number): { ok: t
   const dob = formatDate(mapped["date_of_birth"]);
   if (!dob) return { ok: false, msg: `Row ${rowIndex}: date_of_birth is required (YYYY-MM-DD)` };
 
-  const role = normalizeRole(mapped["role"]);
-  if (!role) return { ok: false, msg: `Row ${rowIndex}: role must be player, coach, medical, or admin` };
+  const role = String(mapped["role"] ?? "").trim();
+  if (!role) return { ok: false, msg: `Row ${rowIndex}: role is required` };
 
   const status = normalizeStatus(mapped["status"]) ?? "active";
 

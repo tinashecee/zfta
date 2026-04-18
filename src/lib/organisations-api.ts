@@ -50,6 +50,8 @@ export type ApiOrganisation = {
   principal_name?: string | null;
   is_official_school_sport?: boolean | null;
   sport_in_official_program?: string | boolean | null;
+  /** Optional; empty string on PATCH clears stored value to null. */
+  sport?: string | null;
 
   primary_contact_name?: string | null;
   primary_contact_title?: string | null;
@@ -111,6 +113,8 @@ export type OrganisationRowLabel = {
   name: string;
   /** `org_type` / `organization_type` from the organisation row. */
   orgType: string;
+  /** Present when `sport` is set on the organisation row. */
+  sport?: string;
 };
 
 /**
@@ -130,7 +134,10 @@ export async function getOrganisationRowLabelsByIds(
         const name = organisationDisplayName(r.data).trim() || fallback;
         const orgTypeRaw = r.data.org_type ?? r.data.organization_type ?? "";
         const orgType = String(orgTypeRaw).trim() || fallback;
-        map.set(orgId, { name, orgType });
+        const sportRaw = r.data.sport;
+        const sport =
+          sportRaw != null && String(sportRaw).trim() !== "" ? String(sportRaw).trim() : undefined;
+        map.set(orgId, { name, orgType, ...(sport ? { sport } : {}) });
       } else {
         map.set(orgId, { name: fallback, orgType: fallback });
       }

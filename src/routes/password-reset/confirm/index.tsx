@@ -54,7 +54,7 @@ export default component$(() => {
       <header class="fixed top-0 w-full z-50 bg-emerald-950/70 backdrop-blur-xl shadow-2xl shadow-emerald-950/20">
         <nav class="flex justify-between items-center px-8 py-4 max-w-full">
           <div class="text-xl font-bold text-white tracking-tighter font-headline">
-            Zimbabwe Football Travel Authority
+            Zimbabwe Sports Travel Authority
           </div>
           <a
             class="text-amber-400 font-semibold border-b-2 border-amber-500 pb-1 font-headline tracking-tight"

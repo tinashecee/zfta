@@ -16,7 +16,7 @@ export default component$(() => {
       <header class="fixed top-0 z-50 w-full bg-emerald-950/70 shadow-2xl shadow-emerald-950/20 backdrop-blur-xl">
         <nav class="flex max-w-full justify-between items-center px-8 py-4">
           <div class="text-xl font-bold tracking-tighter text-white font-headline">
-            Zimbabwe Football Travel Authority
+            Zimbabwe Sports Travel Authority
           </div>
 
           <div class="flex items-center gap-4">
@@ -141,7 +141,7 @@ export default component$(() => {
 
       <footer class="w-full bg-emerald-950 py-12 px-8">
         <div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 md:flex-row">
-          <div class="text-lg font-bold text-white font-headline">Zimbabwe Football Travel Authority</div>
+          <div class="text-lg font-bold text-white font-headline">Zimbabwe Sports Travel Authority</div>
           <div class="flex flex-wrap justify-center gap-8 font-body text-sm antialiased">
             <a class="text-emerald-200/60 transition-colors hover:text-amber-400" href="#">
               Privacy Policy

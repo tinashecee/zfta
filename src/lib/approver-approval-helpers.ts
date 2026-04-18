@@ -8,67 +8,65 @@ function ts(iso?: string | null): number {
   return Number.isNaN(t) ? 0 : t;
 }
 
-function matchBodyKey(body: string | null | undefined): "ZIFA" | "SRC" | "IMMIGRATION" | null {
-  const s = (body ?? "").toUpperCase();
-  if (s.includes("ZIFA")) return "ZIFA";
-  if (s.includes("SRC")) return "SRC";
-  if (s.includes("IMMIGRATION")) return "IMMIGRATION";
-  return null;
+/** Case-insensitive match for approval `body` (supports legacy substring rows). */
+export function approvalBodyMatches(a: ApiApproval, bodyCode: string): boolean {
+  const want = bodyCode.trim().toUpperCase();
+  const got = (a.body ?? "").trim().toUpperCase();
+  if (!got || !want) return false;
+  if (got === want) return true;
+  if (got.includes(want) || want.includes(got)) return true;
+  return false;
 }
 
 /**
- * Latest approval row for a reviewer body (newest by decided_at → updated_at → created_at),
+ * Latest approval row for a reviewer body code (newest by decided_at → updated_at → created_at),
  * same rule as governance.
  */
-export function getLatestApprovalForBody(
+export function getLatestApprovalForBodyCode(
   approvals: ApiApproval[] | null | undefined,
-  body: "ZIFA" | "SRC" | "IMMIGRATION",
+  bodyCode: string,
 ): ApiApproval | undefined {
   if (!approvals?.length) return undefined;
   const sorted = [...approvals].sort(
     (a, b) => ts(approvalActivityInstantIso(b)) - ts(approvalActivityInstantIso(a)),
   );
   for (const a of sorted) {
-    const key = matchBodyKey(a.body);
-    if (key === body) return a;
+    if (approvalBodyMatches(a, bodyCode)) return a;
   }
   return undefined;
 }
 
 /**
  * True if we already POSTed an "opened file" marker (`under_review`) for this reviewer body.
- * Used to avoid duplicate `createApproval` POSTs on every visit — only the first open should POST.
  */
 export function hasUnderReviewApprovalForBody(
   approvals: ApiApproval[] | null | undefined,
-  body: "ZIFA" | "SRC" | "IMMIGRATION",
+  bodyCode: string,
 ): boolean {
   if (!approvals?.length) return false;
   return approvals.some((a) => {
-    if (matchBodyKey(a.body) !== body) return false;
+    if (!approvalBodyMatches(a, bodyCode)) return false;
     return (a.status ?? "").trim().toLowerCase() === "under_review";
   });
 }
 
-/** True if status string means ZIFA has approved the application (handoff to SRC). */
-function isZifaApprovedStatus(status: string | undefined): boolean {
+function isPrimaryApprovedStatus(status: string | undefined): boolean {
   const s = (status ?? "").trim().toLowerCase();
   if (!s) return false;
   return s.includes("approv") && !s.includes("unapproved");
 }
 
 /**
- * Whether ZIFA has **released** the file to SRC: there is a ZIFA row whose status is a real
- * decision (not `pending` / `under_review` open markers), and that decision is approval.
- *
- * We walk ZIFA rows newest-first and skip `pending` and `under_review` so an older `approved`
- * row still counts if a newer auto `under_review` row exists (same application can have both).
+ * Whether the primary (sport) body has **released** the file to SRC: latest non-marker row is approval.
  */
-export function isLatestZifaApproved(approvals: ApiApproval[] | null | undefined): boolean {
+export function isLatestPrimaryBodyApproved(
+  approvals: ApiApproval[] | null | undefined,
+  primaryBodyCode: string,
+): boolean {
   if (!approvals?.length) return false;
-  const zifaRows = approvals.filter((a) => matchBodyKey(a.body) === "ZIFA");
-  if (!zifaRows.length) return false;
-  const sorted = [...zifaRows].sort(
+  const rows = approvals.filter((a) => approvalBodyMatches(a, primaryBodyCode));
+  if (!rows.length) return false;
+  const sorted = [...rows].sort(
     (a, b) => ts(approvalActivityInstantIso(b)) - ts(approvalActivityInstantIso(a)),
   );
   for (const row of sorted) {
@@ -76,14 +74,19 @@ export function isLatestZifaApproved(approvals: ApiApproval[] | null | undefined
     if (s === "pending" || !s) continue;
     if (s === "under_review") continue;
     if (s.includes("reject") || s.includes("denied")) return false;
-    return isZifaApprovedStatus(row.status);
+    return isPrimaryApprovedStatus(row.status);
   }
   return false;
 }
 
+/** @deprecated Use {@link isLatestPrimaryBodyApproved} with resolved primary body code. */
+export function isLatestZifaApproved(approvals: ApiApproval[] | null | undefined): boolean {
+  return isLatestPrimaryBodyApproved(approvals, "ZIFA");
+}
+
 /** Latest SRC row is terminal (SRC stage finished for this file). */
 export function isLatestSrcTerminal(approvals: ApiApproval[] | null | undefined): boolean {
-  const s = getLatestApprovalForBody(approvals, "SRC");
+  const s = getLatestApprovalForBodyCode(approvals, "SRC");
   if (!s) return false;
   const st = (s.status ?? "").trim().toLowerCase();
   return st === "approved" || st === "rejected";
@@ -91,36 +94,34 @@ export function isLatestSrcTerminal(approvals: ApiApproval[] | null | undefined)
 
 /** Latest IMMIGRATION row is terminal (final approve or reject for this file). */
 export function isLatestImmigrationTerminal(approvals: ApiApproval[] | null | undefined): boolean {
-  const s = getLatestApprovalForBody(approvals, "IMMIGRATION");
+  const s = getLatestApprovalForBodyCode(approvals, "IMMIGRATION");
   if (!s) return false;
   const st = (s.status ?? "").trim().toLowerCase();
   return st === "approved" || st === "rejected";
 }
 
 /**
- * SRC may record decisions only while the application is with SRC (`awaiting_src`), ZIFA has
+ * SRC may record decisions only while the application is with SRC (`awaiting_src`), primary body has
  * approved, and SRC has not yet ended with approved/rejected on the approval row.
  */
 export function srcCanEditApplication(
   app: Pick<ApiApplication, "status">,
   approvals: ApiApproval[] | null | undefined,
+  primaryBodyCode: string,
 ): boolean {
   const as = (app.status ?? "").trim().toLowerCase();
   if (as !== "awaiting_src") return false;
-  if (!isLatestZifaApproved(approvals)) return false;
+  if (!isLatestPrimaryBodyApproved(approvals, primaryBodyCode)) return false;
   if (isLatestSrcTerminal(approvals)) return false;
   return true;
 }
 
-/**
- * Whether to POST a new SRC `under_review` "opened" row on load. Only when SRC may edit and we
- * have not already POSTed `under_review` for SRC (no duplicate POSTs).
- */
 export function shouldAutoCreateSrcUnderReview(
   app: Pick<ApiApplication, "status">,
   approvals: ApiApproval[] | null | undefined,
+  primaryBodyCode: string,
 ): boolean {
-  if (!srcCanEditApplication(app, approvals)) return false;
+  if (!srcCanEditApplication(app, approvals, primaryBodyCode)) return false;
   return !hasUnderReviewApprovalForBody(approvals, "SRC");
 }
 
@@ -138,10 +139,6 @@ export function immigrationCanEditApplication(
   return true;
 }
 
-/**
- * Whether to POST a new IMMIGRATION `under_review` "opened" row on load. Only when immigration
- * may edit and we have not already POSTed `under_review` for IMMIGRATION (no duplicate POSTs).
- */
 export function shouldAutoCreateImmigrationUnderReview(
   app: Pick<ApiApplication, "status">,
   approvals: ApiApproval[] | null | undefined,
@@ -159,9 +156,9 @@ const CHIP_BASE =
  */
 export function getBodyApprovalChipDisplay(
   approvals: ApiApproval[] | null | undefined,
-  body: "ZIFA" | "SRC" | "IMMIGRATION",
+  bodyCode: string,
 ): { label: string; icon: string; chipClass: string } {
-  const row = getLatestApprovalForBody(approvals, body);
+  const row = getLatestApprovalForBodyCode(approvals, bodyCode);
   const status = (row?.status ?? "").trim().toLowerCase();
   if (!status || status === "pending") {
     return {
@@ -203,5 +200,29 @@ export function getBodyApprovalChipDisplay(
     label,
     icon: "label",
     chipClass: `${CHIP_BASE} bg-surface-container-highest text-on-surface-variant`,
+  };
+}
+
+export type GovernanceChipTriple = {
+  primary: { code: string; label: string };
+  chips: Array<{ key: string; label: string; icon: string; chipClass: string }>;
+};
+
+/** Three chips: primary sport body + SRC + IMMIGRATION. */
+export function getGovernanceChipTriple(
+  approvals: ApiApproval[] | null | undefined,
+  primary: { code: string; label: string },
+): GovernanceChipTriple {
+  const codes = [
+    { code: primary.code, label: primary.label },
+    { code: "SRC", label: "SRC" },
+    { code: "IMMIGRATION", label: "IMMIGRATION" },
+  ];
+  return {
+    primary,
+    chips: codes.map(({ code, label }) => {
+      const chip = getBodyApprovalChipDisplay(approvals, code);
+      return { key: code, label: `${label}: ${chip.label}`, icon: chip.icon, chipClass: chip.chipClass };
+    }),
   };
 }

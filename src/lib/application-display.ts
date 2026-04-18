@@ -60,9 +60,18 @@ export function humanApplicationStatus(raw: string | undefined): string {
 export function applicantFacingStatusLabel(status: string | undefined): string {
   const s = (status ?? "").toLowerCase();
   if (s === "approved") return "Approved";
+  if (s === "certificate_issued") return "Certificate issued";
   if (s === "rejected") return "Not approved";
   if (s === "draft") return "Draft";
-  if (s === "awaiting_zifa" || s === "submitted") return "Awaiting ZIFA";
+  if (
+    s === "awaiting_body" ||
+    s === "awaiting_zifa" ||
+    s === "awaiting_primary_body" ||
+    s === "awaiting_sport_body" ||
+    s === "submitted"
+  ) {
+    return "Awaiting sport body review";
+  }
   if (s === "awaiting_src" || s === "under_review") return "Awaiting SRC";
   if (s === "awaiting_information") return "Awaiting information";
   if (s === "awaiting_immigration") return "Awaiting immigration";
@@ -121,44 +130,65 @@ function approvalTimelineVariant(a: ApiApproval): TimelineItem["variant"] {
   return "success";
 }
 
-function governanceAllPending(): { rows: GovernanceStake[]; completion: number } {
-  const bodies = ["ZIFA", "SRC", "IMMIGRATION"] as const;
-  const rows: GovernanceStake[] = bodies.map((name) => ({
-    name,
-    subtitle: GOV_SUB[name],
-    state: "pending",
-  }));
+function governanceAllPending(primary: { code: string; label: string }): {
+  rows: GovernanceStake[];
+  completion: number;
+} {
+  const p = primary;
+  const rows: GovernanceStake[] = [
+    { name: p.label, subtitle: "Sport federation", state: "pending" },
+    { name: "SRC", subtitle: GOV_SUB.SRC, state: "pending" },
+    { name: "IMMIGRATION", subtitle: GOV_SUB.IMMIGRATION, state: "pending" },
+  ];
   return { rows, completion: 0 };
+}
+
+function approvalMatchesBodyCode(a: ApiApproval, bodyCode: string): boolean {
+  const want = bodyCode.trim().toUpperCase();
+  const got = (a.body ?? "").trim().toUpperCase();
+  if (!got || !want) return false;
+  if (got === want) return true;
+  if (got.includes(want) || want.includes(got)) return true;
+  return false;
 }
 
 /**
  * Governance from approval rows; empty list ⇒ all bodies pending.
- * For each of ZIFA / SRC / IMMIGRATION, uses the **latest** matching row by
- * `decided_at` → `updated_at` → `created_at` (newest wins).
+ * First column is the sport-specific body (`primary`), then SRC and Immigration.
  */
 export function governanceFromApprovals(
   _applicationStatus: string | undefined,
   approvals: ApiApproval[] | null | undefined,
+  primary?: { code: string; label: string },
 ): { rows: GovernanceStake[]; completion: number } {
+  const p = primary ?? { code: "ZIFA", label: "ZIFA" };
   if (!approvals?.length) {
-    return governanceAllPending();
+    return governanceAllPending(p);
   }
 
-  const bodies = ["ZIFA", "SRC", "IMMIGRATION"] as const;
+  const triple: Array<{ code: string; label: string; subtitle: string }> = [
+    { code: p.code, label: p.label, subtitle: "Sport federation" },
+    { code: "SRC", label: "SRC", subtitle: GOV_SUB.SRC },
+    { code: "IMMIGRATION", label: "IMMIGRATION", subtitle: GOV_SUB.IMMIGRATION },
+  ];
+
   const sorted = [...approvals].sort(
     (a, b) => ts(approvalActivityInstantIso(b)) - ts(approvalActivityInstantIso(a)),
   );
-  const latest = new Map<"ZIFA" | "SRC" | "IMMIGRATION", ApiApproval>();
+  const latest = new Map<string, ApiApproval>();
   for (const a of sorted) {
-    const key = matchBodyKey(a.body);
-    if (key && !latest.has(key)) latest.set(key, a);
+    for (const t of triple) {
+      if (approvalMatchesBodyCode(a, t.code) && !latest.has(t.code)) {
+        latest.set(t.code, a);
+      }
+    }
   }
 
-  const rows: GovernanceStake[] = bodies.map((name) => {
-    const ap = latest.get(name);
+  const rows: GovernanceStake[] = triple.map((t) => {
+    const ap = latest.get(t.code);
     return {
-      name,
-      subtitle: GOV_SUB[name],
+      name: t.label,
+      subtitle: t.subtitle,
       state: ap ? approvalStatusToStakeState(ap.status) : "pending",
     };
   });
@@ -302,7 +332,10 @@ export function buildMergedApplicationTimeline(
       st &&
       st !== "draft" &&
       st !== "rejected" &&
+      st !== "awaiting_body" &&
       st !== "awaiting_zifa" &&
+      st !== "awaiting_primary_body" &&
+      st !== "awaiting_sport_body" &&
       st !== "submitted" &&
       st !== "awaiting_src" &&
       st !== "under_review"
@@ -314,12 +347,18 @@ export function buildMergedApplicationTimeline(
         body: "Your dossier is being processed by the relevant authorities." + submittedTimestampNote,
         variant: "success",
       });
-    } else if (st === "awaiting_zifa" || st === "submitted") {
+    } else if (
+      st === "awaiting_body" ||
+      st === "awaiting_zifa" ||
+      st === "awaiting_primary_body" ||
+      st === "awaiting_sport_body" ||
+      st === "submitted"
+    ) {
       items.push({
         when: "Recent",
         eyebrow: "Processing",
-        title: "Awaiting ZIFA",
-        body: "Your dossier is queued for ZIFA review." + submittedTimestampNote,
+        title: "Awaiting sport body review",
+        body: "Your dossier is queued for the relevant national sport body." + submittedTimestampNote,
         variant: "success",
       });
     } else if (st === "awaiting_src" || st === "under_review") {
@@ -327,7 +366,7 @@ export function buildMergedApplicationTimeline(
         when: "Recent",
         eyebrow: "Processing",
         title: "Awaiting SRC",
-        body: "ZIFA review is complete; your dossier is with SRC." + submittedTimestampNote,
+        body: "Sport body review is complete; your dossier is with SRC." + submittedTimestampNote,
         variant: "success",
       });
     }

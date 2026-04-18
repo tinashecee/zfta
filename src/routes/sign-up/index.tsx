@@ -1,4 +1,4 @@
-import { $, component$, useSignal, useStore, useTask$ } from "@builder.io/qwik";
+import { $, component$, useSignal, useStore, useTask$, useVisibleTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
 import {
   getCurrentUser,
@@ -6,6 +6,14 @@ import {
   signUp,
   type AuthUser,
 } from "~/lib/auth";
+import { APPROVER_BODY_KINDS, displayApproverBodyKind } from "~/lib/users-api";
+import {
+  listSportBodies,
+  sportBodyApprovalCode,
+  sportBodyUserPayloadId,
+  sportBodiesForApproverSelect,
+  type ApiSportBody,
+} from "~/lib/sport-bodies-api";
 
 /** Values accepted by `POST /api/v1/auth/sign-up` */
 const SIGNUP_ROLES = ["applicant", "reviewer", "supervisor", "system_admin"] as const;
@@ -18,8 +26,10 @@ type SignUpFormState = {
   full_name: string;
   mobile_number: string;
   role: SignUpRole;
-  /** Empty string = omit `body` in JSON */
-  body: "" | "ZIFA" | "SRC" | "IMMIGRATION";
+  /** `SPORTS_BODY` | `SRC` | `IMMIGRATION` or "" */
+  approver_body: string;
+  /** Sport-body row id as string when `approver_body` is SPORTS_BODY */
+  sports_body: string;
 };
 
 function buildSignUpPayload(form: SignUpFormState): Record<string, unknown> {
@@ -30,8 +40,12 @@ function buildSignUpPayload(form: SignUpFormState): Record<string, unknown> {
     mobile_number: form.mobile_number.trim(),
     role: form.role,
   };
-  if (form.body) {
-    payload.body = form.body;
+  if (form.role === "reviewer" && form.approver_body.trim()) {
+    payload.approver_body = form.approver_body.trim().toUpperCase();
+    if (payload.approver_body === "SPORTS_BODY") {
+      const code = form.sports_body.trim();
+      if (code) payload.sports_body = code;
+    }
   }
   return payload;
 }
@@ -101,8 +115,11 @@ export default component$(() => {
     full_name: "",
     mobile_number: "",
     role: "applicant",
-    body: "",
+    approver_body: "",
+    sports_body: "",
   });
+
+  const roleFormError = useSignal("");
 
   const fieldErrors = useStore<Record<FieldKey, string>>({
     email: "",
@@ -120,13 +137,22 @@ export default component$(() => {
     confirmPassword: false,
   });
 
+  const sportBodies = useSignal<ApiSportBody[]>([]);
+
   useTask$(() => {
     currentUser.value = getCurrentUser();
+  });
+
+  // eslint-disable-next-line qwik/no-use-visible-task
+  useVisibleTask$(async () => {
+    const r = await listSportBodies({ limit: 500, offset: 0 });
+    if (r.ok) sportBodies.value = r.data;
   });
 
   const onSubmit$ = $(async () => {
     submitAttempted.value = true;
     syncFieldErrors(form, fieldErrors);
+    roleFormError.value = "";
 
     if (!SIGNUP_ROLES.includes(form.role)) {
       return;
@@ -134,6 +160,20 @@ export default component$(() => {
 
     if (hasBlockingErrors(fieldErrors)) {
       return;
+    }
+
+    if (form.role === "reviewer") {
+      const k = form.approver_body.trim().toUpperCase();
+      if (!k || !(APPROVER_BODY_KINDS as readonly string[]).includes(k)) {
+        roleFormError.value = "Select an approver body type.";
+        return;
+      }
+      if (k === "SPORTS_BODY") {
+        if (!form.sports_body.trim()) {
+          roleFormError.value = "Select a sport body.";
+          return;
+        }
+      }
     }
 
     busy.value = true;
@@ -160,7 +200,7 @@ export default component$(() => {
       <header class="fixed top-0 w-full z-50 bg-emerald-950/70 backdrop-blur-xl shadow-2xl shadow-emerald-950/20">
         <nav class="flex justify-between items-center px-8 py-4 max-w-full">
           <div class="text-xl font-bold text-white tracking-tighter font-headline">
-            Zimbabwe Football Travel Authority
+            Zimbabwe Sports Travel Authority
           </div>
 
           <div class="flex items-center gap-4">
@@ -381,6 +421,11 @@ export default component$(() => {
                       value={form.role}
                       onChange$={(e) => {
                         form.role = (e.target as HTMLSelectElement).value as SignUpRole;
+                        if (form.role !== "reviewer") {
+                          form.approver_body = "";
+                          form.sports_body = "";
+                          roleFormError.value = "";
+                        }
                       }}
                       required
                     >
@@ -391,27 +436,63 @@ export default component$(() => {
                     </select>
                   </div>
 
-                  <div class="md:col-span-2">
-                    <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                      Body <span class="font-normal normal-case text-on-surface-variant/80">(optional)</span>
-                    </label>
-                    <select
-                      class="w-full rounded-xl border-none bg-surface-container-low p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                      value={form.body}
-                      onChange$={(e) => {
-                        form.body = (e.target as HTMLSelectElement).value as SignUpFormState["body"];
-                      }}
-                    >
-                      <option value="">None — omit</option>
-                      <option value="ZIFA">ZIFA</option>
-                      <option value="SRC">SRC</option>
-                      <option value="IMMIGRATION">IMMIGRATION</option>
-                    </select>
-                    <p class="mt-1 text-xs text-on-surface-variant">
-                      For reviewers: link to ZIFA, SRC, or Immigration where applicable.
-                    </p>
-                  </div>
+                  {form.role === "reviewer" ? (
+                    <>
+                      <div class="md:col-span-2">
+                        <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                          Approver body type
+                        </label>
+                        <select
+                          class="w-full rounded-xl border-none bg-surface-container-low p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
+                          value={form.approver_body}
+                          onChange$={(e) => {
+                            form.approver_body = (e.target as HTMLSelectElement).value;
+                            if (form.approver_body !== "SPORTS_BODY") {
+                              form.sports_body = "";
+                            }
+                            roleFormError.value = "";
+                          }}
+                          required
+                        >
+                          <option value="">— Select —</option>
+                          {APPROVER_BODY_KINDS.map((k) => (
+                            <option key={k} value={k}>
+                              {displayApproverBodyKind(k)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {form.approver_body === "SPORTS_BODY" ? (
+                        <div class="md:col-span-2">
+                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                            Sport body
+                          </label>
+                          <select
+                            class="w-full rounded-xl border-none bg-surface-container-low p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
+                            value={form.sports_body}
+                            onChange$={(e) => {
+                              form.sports_body = (e.target as HTMLSelectElement).value;
+                              roleFormError.value = "";
+                            }}
+                            required
+                          >
+                            <option value="">— Select —</option>
+                            {sportBodiesForApproverSelect(sportBodies.value).map((b) => (
+                              <option key={b.id} value={sportBodyUserPayloadId(b)}>
+                                {`${b.name ?? sportBodyApprovalCode(b)} (${sportBodyUserPayloadId(b)})`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
                 </div>
+                {roleFormError.value ? (
+                  <p class="text-sm text-error" role="alert">
+                    {roleFormError.value}
+                  </p>
+                ) : null}
 
                 <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <div>
@@ -524,7 +605,7 @@ export default component$(() => {
 
       <footer class="bg-emerald-950 w-full py-12 px-8">
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div class="text-lg font-bold text-white font-headline">Zimbabwe Football Travel Authority</div>
+          <div class="text-lg font-bold text-white font-headline">Zimbabwe Sports Travel Authority</div>
           <div class="flex flex-wrap justify-center gap-8 font-body text-sm antialiased">
             <a class="text-emerald-200/60 hover:text-amber-400 transition-colors" href="#">
               Privacy Policy

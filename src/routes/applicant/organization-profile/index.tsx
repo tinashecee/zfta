@@ -13,14 +13,32 @@ import {
   type ApiOrganisation,
 } from "~/lib/organisations-api";
 
-/** `models.ValidOrgType` — align with backend if validation fails. */
-const ORG_TYPE_OPTIONS = [
-  { value: "football_club", label: "Football Club" },
-  { value: "football_academy", label: "Football Academy" },
-  { value: "high_school", label: "High School" },
-  { value: "primary_school", label: "Primary School" },
-  { value: "college_university", label: "College / University" },
+/** `models.ValidOrgType` — align with backend enum. */
+const ORG_TYPE_VALUES = [
+  "club",
+  "individual",
+  "academy",
+  "high_school",
+  "primary_school",
+  "college_university",
+  "company",
 ] as const;
+
+const ORG_TYPE_OPTIONS = [
+  { value: "club" as const, label: "Club" },
+  { value: "individual" as const, label: "Individual" },
+  { value: "academy" as const, label: "Academy" },
+  { value: "high_school" as const, label: "High School" },
+  { value: "primary_school" as const, label: "Primary School" },
+  { value: "college_university" as const, label: "College / University" },
+  { value: "company" as const, label: "Company" },
+] as const;
+
+/** Older API responses (`football_club`, …) map to the new `org_type` strings. */
+const LEGACY_ORG_TYPE_TO_CANONICAL: Record<string, (typeof ORG_TYPE_VALUES)[number]> = {
+  football_club: "club",
+  football_academy: "academy",
+};
 
 /**
  * `zw_province` — values sent as JSON must match backend enum (often Title Case names, not snake_case).
@@ -85,6 +103,43 @@ const LEGACY_DIVISION_TO_CANONICAL: Record<string, (typeof FOOTBALL_DIVISION_VAL
 
 const REQ = " (required)";
 
+/** API `sport` — must match backend enum strings. */
+const SPORT_VALUES = [
+  "cricket",
+  "football",
+  "rugby",
+  "hockey",
+  "tennis",
+  "chess",
+  "darts",
+  "boxing",
+  "karate",
+  "athletics",
+  "swimming",
+  "netball",
+  "golf",
+  "basketball",
+  "volleyball",
+  "cycling",
+  "motorsport",
+] as const;
+
+function sportLabel(value: string): string {
+  if (value === "motorsport") return "Motorsport";
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+}
+
+const SPORT_OPTIONS = SPORT_VALUES.map((v) => ({ value: v, label: sportLabel(v) }));
+
+function normalizeSport(raw: string | null | undefined): string {
+  const s = (raw ?? "").trim();
+  if (!s) return "";
+  const lower = s.toLowerCase();
+  const hit = SPORT_VALUES.find((v) => v === lower);
+  if (hit) return hit;
+  return (SPORT_VALUES as readonly string[]).includes(s) ? s : "";
+}
+
 function normalizeProvince(raw: string | null | undefined): string {
   const s = (raw ?? "").trim();
   if (!s) return "";
@@ -99,7 +154,10 @@ function normalizeProvince(raw: string | null | undefined): string {
 function normalizeOrgType(raw: string | null | undefined): string {
   const s = (raw ?? "").trim();
   if (!s) return "";
-  if (ORG_TYPE_OPTIONS.some((o) => o.value === s)) return s;
+  if ((ORG_TYPE_VALUES as readonly string[]).includes(s)) return s;
+  const lowerUnderscore = s.toLowerCase().replace(/\s+/g, "_");
+  const fromLegacy = LEGACY_ORG_TYPE_TO_CANONICAL[lowerUnderscore];
+  if (fromLegacy) return fromLegacy;
   const byLabel = ORG_TYPE_OPTIONS.find((o) => o.label.toLowerCase() === s.toLowerCase());
   return byLabel?.value ?? "";
 }
@@ -150,11 +208,11 @@ type OrgForm = {
   division: string;
   /** When division is "Other", custom text sent as `division` in the payload. */
   divisionOther: string;
-  isZifaRegistered: boolean;
-  zifaAffiliationNumber: string;
   moeRegistrationNumber: string;
   principalName: string;
   isOfficialSchoolSport: boolean;
+  /** One of {@link SPORT_VALUES}; required for create/update. */
+  sport: string;
   primaryContactName: string;
   primaryContactTitle: string;
   primaryContactMobile: string;
@@ -181,11 +239,10 @@ function emptyForm(): OrgForm {
     website: "",
     division: "",
     divisionOther: "",
-    isZifaRegistered: false,
-    zifaAffiliationNumber: "",
     moeRegistrationNumber: "",
     principalName: "",
     isOfficialSchoolSport: false,
+    sport: "",
     primaryContactName: "",
     primaryContactTitle: "",
     primaryContactMobile: "",
@@ -212,17 +269,13 @@ function mapOrgToForm(o: ApiOrganisation): OrgForm {
     establishmentDate: (o.establishment_date ?? "").slice(0, 10),
     website: o.website ?? "",
     ...parseDivisionFromApi(o.division ?? o.division_league),
-    isZifaRegistered:
-      typeof o.is_zifa_registered === "boolean"
-        ? o.is_zifa_registered
-        : ynToBool(o.zifa_registration_active),
-    zifaAffiliationNumber: o.zifa_affiliation_number ?? o.affiliation_number ?? "",
     moeRegistrationNumber: o.moe_registration_number ?? "",
     principalName: o.principal_name ?? "",
     isOfficialSchoolSport:
       typeof o.is_official_school_sport === "boolean"
         ? o.is_official_school_sport
         : ynToBool(o.sport_in_official_program),
+    sport: normalizeSport(o.sport != null ? String(o.sport) : ""),
     primaryContactName: o.primary_contact_name ?? "",
     primaryContactTitle: o.primary_contact_title ?? o.primary_role ?? "",
     primaryContactMobile: o.primary_contact_mobile ?? o.primary_mobile ?? "",
@@ -241,7 +294,7 @@ function mapOrgToForm(o: ApiOrganisation): OrgForm {
   };
 }
 
-function formToPayload(form: OrgForm, mode: "create" | "edit"): Record<string, unknown> {
+function formToPayload(form: OrgForm): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     org_name: form.orgName.trim(),
     org_type: form.orgType,
@@ -251,7 +304,6 @@ function formToPayload(form: OrgForm, mode: "create" | "edit"): Record<string, u
     primary_contact_name: form.primaryContactName.trim(),
     primary_contact_mobile: form.primaryContactMobile.trim(),
     primary_contact_email: form.primaryContactEmail.trim(),
-    is_zifa_registered: form.isZifaRegistered,
     is_official_school_sport: form.isOfficialSchoolSport,
   };
 
@@ -267,9 +319,6 @@ function formToPayload(form: OrgForm, mode: "create" | "edit"): Record<string, u
     payload.division = spec || OTHER_DIVISION;
   } else if (form.division.trim()) {
     payload.division = form.division.trim();
-  }
-  if (form.zifaAffiliationNumber.trim()) {
-    payload.zifa_affiliation_number = form.zifaAffiliationNumber.trim();
   }
   if (form.moeRegistrationNumber.trim()) {
     payload.moe_registration_number = form.moeRegistrationNumber.trim();
@@ -301,10 +350,15 @@ function formToPayload(form: OrgForm, mode: "create" | "edit"): Record<string, u
   if (form.emergencyContactRelation.trim()) {
     payload.emergency_contact_relation = form.emergencyContactRelation.trim();
   }
+  payload.sport = form.sport.trim();
   return payload;
 }
 
 function validateOrgForm(form: OrgForm): string | null {
+  const sport = form.sport.trim();
+  if (!sport || !(SPORT_VALUES as readonly string[]).includes(sport)) {
+    return "Sport is required.";
+  }
   if (!form.orgName.trim()) {
     return "Organization name is required.";
   }
@@ -398,7 +452,7 @@ export default component$(() => {
     saving.value = true;
     try {
       if (mode.value === "create") {
-        const payload = formToPayload(form, "create");
+        const payload = formToPayload(form);
         const r = await createOrganisation(payload);
         saving.value = false;
         if (!r.ok) {
@@ -418,7 +472,7 @@ export default component$(() => {
         formError.value = "Missing organization id.";
         return;
       }
-      const r = await patchOrganisation(orgId.value, formToPayload(form, "edit"));
+      const r = await patchOrganisation(orgId.value, formToPayload(form));
       saving.value = false;
       if (!r.ok) {
         formError.value = r.error;
@@ -505,6 +559,31 @@ export default component$(() => {
             <p class="text-on-surface-variant">Loading organization…</p>
           ) : (
             <form class="space-y-8" preventdefault:submit onSubmit$={onSave$}>
+              <div class="bg-surface-container-lowest p-6 sm:p-8 rounded-xl shadow-sm border border-outline-variant/15">
+                <div class="max-w-xl flex flex-col gap-1.5">
+                  <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                    Sport <span class="text-primary">{REQ}</span>
+                  </label>
+                  <select
+                    class="w-full bg-surface-container-low border-0 focus:ring-1 focus:ring-primary/30 rounded-lg p-3 text-on-surface appearance-none"
+                    value={form.sport}
+                    required
+                    onChange$={(e) => {
+                      form.sport = (e.target as HTMLSelectElement).value;
+                    }}
+                  >
+                    <option value="" disabled>
+                      Select sport
+                    </option>
+                    {SPORT_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div class="md:col-span-2 bg-surface-container-lowest p-8 rounded-xl shadow-sm border border-outline-variant/15">
                   <h3 class="font-headline font-bold text-xl text-primary mb-6 flex items-center gap-2">
@@ -556,20 +635,6 @@ export default component$(() => {
                         value={form.establishmentDate}
                         onInput$={(e) => {
                           form.establishmentDate = (e.target as HTMLInputElement).value;
-                        }}
-                      />
-                    </div>
-                    <div class="flex flex-col gap-1.5">
-                      <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                        ZIFA affiliation number <span class="text-on-surface-variant/80">(optional)</span>
-                      </label>
-                      <input
-                        class="w-full bg-surface-container-low border-0 focus:ring-1 focus:ring-primary/30 rounded-lg p-3 text-on-surface"
-                        placeholder="ZIFA-XXXX"
-                        type="text"
-                        value={form.zifaAffiliationNumber}
-                        onInput$={(e) => {
-                          form.zifaAffiliationNumber = (e.target as HTMLInputElement).value;
                         }}
                       />
                     </div>
@@ -879,20 +944,6 @@ export default component$(() => {
                             />
                           </div>
                         )}
-
-                        <label class="flex cursor-pointer items-center gap-3 rounded-lg bg-surface-container-low p-3">
-                          <input
-                            class="h-4 w-4 rounded border-outline text-primary focus:ring-primary"
-                            type="checkbox"
-                            checked={form.isZifaRegistered}
-                            onChange$={(e) => {
-                              form.isZifaRegistered = (e.target as HTMLInputElement).checked;
-                            }}
-                          />
-                          <span class="text-sm font-semibold text-primary">
-                            ZIFA registered
-                          </span>
-                        </label>
 
                         <div class="flex flex-col gap-1.5">
                           <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">

@@ -3,14 +3,16 @@ import type { DocumentHead } from "@builder.io/qwik-city";
 import { AdminPortalNav } from "~/components/admin-portal-nav";
 import {
   ACCOUNT_STATUSES,
-  APPROVER_BODY_OPTIONS,
+  APPROVER_BODY_KINDS,
   createUser,
   deleteUser,
+  displayApproverBodyKind,
+  formatUserApproverSummary,
   formatUserDate,
   getUser,
+  inferApproverFormFromUser,
   listUsers,
   normalizeAccountStatusForForm,
-  normalizeApproverBodyForForm,
   normalizeUserRoleForForm,
   patchUser,
   roleBadgeClass,
@@ -18,6 +20,8 @@ import {
   type ApiUser,
   USER_ROLES,
 } from "~/lib/users-api";
+import { coerceSportsBodyToString } from "~/lib/auth";
+import { listSportBodies, sportBodyApprovalCode, sportBodyUserPayloadId, type ApiSportBody } from "~/lib/sport-bodies-api";
 
 export default component$(() => {
   const loading = useSignal(true);
@@ -33,6 +37,8 @@ export default component$(() => {
   const saving = useSignal(false);
   const showModal = useSignal(false);
   const editId = useSignal<string | null>(null);
+  /** True while fetching `GET /users/{id}` to fill the edit form (list rows may omit approver fields). */
+  const editFormLoading = useSignal(false);
 
   const showViewModal = useSignal(false);
   const viewLoading = useSignal(false);
@@ -43,11 +49,19 @@ export default component$(() => {
   const password = useSignal("");
   const fullName = useSignal("");
   const mobile = useSignal("");
-  const body = useSignal("");
+  const approverBodyKind = useSignal("");
+  /** Selected sport-body row id as string (matches `sports_body` in API) */
+  const sportsBodyCode = useSignal("");
   const role = useSignal<string>("applicant");
   const status = useSignal("pending_profile");
   const statusReason = useSignal("");
   const emailVerified = useSignal(false);
+  const sportBodies = useSignal<ApiSportBody[]>([]);
+
+  useVisibleTask$(async () => {
+    const r = await listSportBodies({ limit: 500, offset: 0 });
+    if (r.ok) sportBodies.value = r.data;
+  });
 
   useVisibleTask$(async ({ track }) => {
     track(() => loadKey.value);
@@ -64,13 +78,15 @@ export default component$(() => {
   });
 
   const openCreate$ = $(() => {
+    editFormLoading.value = false;
     editId.value = null;
     formError.value = null;
     email.value = "";
     password.value = "";
     fullName.value = "";
     mobile.value = "";
-    body.value = "";
+    approverBodyKind.value = "";
+    sportsBodyCode.value = "";
     role.value = "applicant";
     status.value = "pending_profile";
     statusReason.value = "";
@@ -78,21 +94,43 @@ export default component$(() => {
     showModal.value = true;
   });
 
-  const beginEdit$ = $((id: string) => {
-    const u = users.value.find((x) => x.id === id) ?? (viewUser.value?.id === id ? viewUser.value : null);
-    if (!u) return;
-    editId.value = u.id;
+  const beginEdit$ = $(async (id: string) => {
     formError.value = null;
+    editId.value = id;
+    editFormLoading.value = true;
+    showModal.value = true;
+    email.value = "";
+    password.value = "";
+    fullName.value = "";
+    mobile.value = "";
+    approverBodyKind.value = "";
+    sportsBodyCode.value = "";
+    role.value = "applicant";
+    status.value = "pending_profile";
+    statusReason.value = "";
+    emailVerified.value = false;
+
+    const r = await getUser(id);
+    editFormLoading.value = false;
+    if (!r.ok) {
+      formError.value = r.error;
+      showModal.value = false;
+      editId.value = null;
+      return;
+    }
+
+    const u = r.data;
     email.value = u.email;
     password.value = "";
     fullName.value = u.full_name;
     mobile.value = u.mobile_number ?? "";
-    body.value = normalizeApproverBodyForForm(u.body);
+    const inf = inferApproverFormFromUser(u, sportBodies.value);
+    approverBodyKind.value = inf.kind;
+    sportsBodyCode.value = inf.sportsBodyCode;
     role.value = normalizeUserRoleForForm(u.role);
     status.value = normalizeAccountStatusForForm(u.status);
     statusReason.value = u.status_reason ?? "";
     emailVerified.value = u.email_verified;
-    showModal.value = true;
   });
 
   const openView$ = $(async (id: string) => {
@@ -124,26 +162,59 @@ export default component$(() => {
 
   const closeModal$ = $(() => {
     showModal.value = false;
+    editFormLoading.value = false;
   });
 
   const submitModal$ = $(async () => {
+    if (editFormLoading.value) return;
     formError.value = null;
     saving.value = true;
+
+    const kind = approverBodyKind.value.trim().toUpperCase();
+
+    if (role.value === "reviewer") {
+      if (!kind || !(APPROVER_BODY_KINDS as readonly string[]).includes(kind)) {
+        saving.value = false;
+        formError.value = "Select an approver body type for reviewers.";
+        return;
+      }
+      if (kind === "SPORTS_BODY") {
+        if (!sportsBodyCode.value.trim()) {
+          saving.value = false;
+          formError.value = "Select a sport body.";
+          return;
+        }
+      }
+    }
 
     if (editId.value) {
       const patch: Record<string, unknown> = {
         email: email.value.trim(),
         full_name: fullName.value.trim(),
         mobile_number: mobile.value.trim() || undefined,
-        body: body.value.trim() ? body.value.trim() : undefined,
         role: role.value,
         status: status.value,
         status_reason: statusReason.value.trim() || undefined,
         email_verified: emailVerified.value,
       };
+      if (role.value === "reviewer") {
+        patch.approver_body = kind;
+        patch.sports_body = kind === "SPORTS_BODY" ? sportsBodyCode.value.trim() : null;
+      } else {
+        patch.approver_body = null;
+        patch.sports_body = null;
+      }
       if (password.value.trim()) {
         patch.password = password.value;
       }
+      const logPayload = { ...patch };
+      if (typeof logPayload.password === "string") {
+        logPayload.password = "[redacted]";
+      }
+      console.info("[admin/system-users] PATCH /api/v1/users/{id}", {
+        userId: editId.value,
+        body: logPayload,
+      });
       const r = await patchUser(editId.value, patch);
       saving.value = false;
       if (!r.ok) {
@@ -156,17 +227,21 @@ export default component$(() => {
         formError.value = "Email, password, and full name are required.";
         return;
       }
-      const r = await createUser({
+      const createPayload: Parameters<typeof createUser>[0] = {
         email: email.value.trim().toLowerCase(),
         password: password.value,
         full_name: fullName.value.trim(),
         mobile_number: mobile.value.trim() || undefined,
-        body: body.value.trim() ? body.value.trim() : undefined,
         role: role.value,
         status: status.value,
         status_reason: statusReason.value.trim() || undefined,
         email_verified: emailVerified.value,
-      });
+      };
+      if (role.value === "reviewer") {
+        createPayload.approver_body = kind;
+        createPayload.sports_body = kind === "SPORTS_BODY" ? sportsBodyCode.value.trim() : null;
+      }
+      const r = await createUser(createPayload);
       saving.value = false;
       if (!r.ok) {
         formError.value = r.error;
@@ -320,7 +395,9 @@ export default component$(() => {
                           {u.role}
                         </span>
                       </td>
-                      <td class="px-6 py-5 text-sm text-on-surface-variant">{u.body ?? "—"}</td>
+                      <td class="px-6 py-5 text-sm text-on-surface-variant">
+                        {formatUserApproverSummary(u, sportBodies.value)}
+                      </td>
                       <td class="px-6 py-5">
                         <span class={`rounded-full px-3 py-1 text-[11px] font-bold ${statusBadgeClass(u.status)}`}>
                           {u.status}
@@ -418,7 +495,14 @@ export default component$(() => {
               {editId.value ? "Edit user" : "Create user"}
             </h3>
 
-            <div class="mt-4 space-y-3">
+            {editId.value && editFormLoading.value ? (
+              <p class="mt-4 text-sm text-on-surface-variant">Loading user…</p>
+            ) : null}
+
+            <div
+              class={`mt-4 space-y-3 ${editId.value && editFormLoading.value ? "hidden" : ""}`}
+              aria-hidden={editId.value && editFormLoading.value ? true : undefined}
+            >
               <label class="block text-xs font-bold uppercase text-outline">
                 Email
                 <input
@@ -463,28 +547,16 @@ export default component$(() => {
                 />
               </label>
               <label class="block text-xs font-bold uppercase text-outline">
-                Approver body (optional)
-                <select
-                  class="mt-1 w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm"
-                  value={body.value}
-                  onChange$={(_, el) => {
-                    body.value = el.value;
-                  }}
-                >
-                  {APPROVER_BODY_OPTIONS.map((b) => (
-                    <option key={b || "none"} value={b}>
-                      {b || "—"}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label class="block text-xs font-bold uppercase text-outline">
                 User role
                 <select
                   class="mt-1 w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm"
                   value={role.value}
                   onChange$={(_, el) => {
                     role.value = el.value;
+                    if (el.value !== "reviewer") {
+                      approverBodyKind.value = "";
+                      sportsBodyCode.value = "";
+                    }
                   }}
                 >
                   {USER_ROLES.map((r) => (
@@ -494,6 +566,49 @@ export default component$(() => {
                   ))}
                 </select>
               </label>
+              {role.value === "reviewer" ? (
+                <>
+                  <label class="block text-xs font-bold uppercase text-outline">
+                    Approver body type
+                    <select
+                      class="mt-1 w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm"
+                      value={approverBodyKind.value}
+                      onChange$={(_, el) => {
+                        approverBodyKind.value = el.value;
+                        if (el.value !== "SPORTS_BODY") {
+                          sportsBodyCode.value = "";
+                        }
+                      }}
+                    >
+                      <option value="">— Select —</option>
+                      {APPROVER_BODY_KINDS.map((k) => (
+                        <option key={k} value={k}>
+                          {displayApproverBodyKind(k)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {approverBodyKind.value === "SPORTS_BODY" ? (
+                    <label class="block text-xs font-bold uppercase text-outline">
+                      Sport body
+                      <select
+                        class="mt-1 w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm"
+                        value={sportsBodyCode.value}
+                        onChange$={(_, el) => {
+                          sportsBodyCode.value = el.value;
+                        }}
+                      >
+                        <option value="">— Select —</option>
+                        {sportBodies.value.map((b) => (
+                          <option key={b.id} value={sportBodyUserPayloadId(b)}>
+                            {`${b.name ?? sportBodyApprovalCode(b)} (${sportBodyUserPayloadId(b)})`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                </>
+              ) : null}
               <label class="block text-xs font-bold uppercase text-outline">
                 Account status
                 <select
@@ -545,7 +660,7 @@ export default component$(() => {
               <button
                 type="button"
                 class="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
-                disabled={saving.value}
+                disabled={saving.value || (Boolean(editId.value) && editFormLoading.value)}
                 onClick$={submitModal$}
               >
                 {saving.value ? "Saving…" : editId.value ? "Save" : "Create"}
@@ -601,9 +716,33 @@ export default component$(() => {
                     </dd>
                   </div>
                   <div>
-                    <dt class="text-[10px] font-bold uppercase tracking-widest text-outline">Approver body</dt>
-                    <dd class="mt-1">{viewUser.value.body ?? "—"}</dd>
+                    <dt class="text-[10px] font-bold uppercase tracking-widest text-outline">Approver</dt>
+                    <dd class="mt-1">
+                      {formatUserApproverSummary(viewUser.value, sportBodies.value)}
+                    </dd>
                   </div>
+                  {viewUser.value.approver_body ||
+                  coerceSportsBodyToString(viewUser.value.sports_body) ||
+                  viewUser.value.sport_body_id ? (
+                    <div>
+                      <dt class="text-[10px] font-bold uppercase tracking-widest text-outline">API fields</dt>
+                      <dd class="mt-1 font-mono text-xs text-on-surface-variant">
+                        approver_body: {viewUser.value.approver_body ?? "—"}
+                        {coerceSportsBodyToString(viewUser.value.sports_body)
+                          ? ` · sports_body: ${coerceSportsBodyToString(viewUser.value.sports_body)}`
+                          : ""}
+                        {viewUser.value.sport_body_id != null && viewUser.value.sport_body_id > 0
+                          ? ` · sport_body_id: ${viewUser.value.sport_body_id}`
+                          : ""}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {viewUser.value.body ? (
+                    <div>
+                      <dt class="text-[10px] font-bold uppercase tracking-widest text-outline">Legacy body</dt>
+                      <dd class="mt-1 font-mono text-xs">{viewUser.value.body}</dd>
+                    </div>
+                  ) : null}
                   <div>
                     <dt class="text-[10px] font-bold uppercase tracking-widest text-outline">Account status</dt>
                     <dd class="mt-1">

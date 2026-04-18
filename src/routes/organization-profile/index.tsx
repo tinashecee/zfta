@@ -7,7 +7,7 @@ export default component$(() => {
       {/* TopNavBar */}
       <nav class="fixed top-0 w-full z-50 bg-primary/95 backdrop-blur-xl shadow-[0_40px_60px_-15px_rgba(25,28,27,0.06)] flex justify-between items-center px-8 py-4 max-w-none w-full">
         <div class="text-xl font-extrabold tracking-tighter text-white uppercase font-headline">
-          Zim Football Travel Authority
+          Zim Sports Travel Authority
         </div>
 
         <div class="flex items-center gap-4">
@@ -356,7 +356,7 @@ export default component$(() => {
       {/* Footer */}
       <footer class="bg-[#191c1b] dark:bg-black w-full mt-auto flex flex-col md:flex-row justify-between items-center px-12 py-10 border-t border-white/5">
         <div class="font-['Manrope'] font-black text-emerald-50 mb-6 md:mb-0">
-          Zim Football Travel Authority
+          Zim Sports Travel Authority
         </div>
         <div class="flex flex-wrap justify-center gap-8 mb-6 md:mb-0">
           <a

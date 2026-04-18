@@ -9,17 +9,26 @@ import { getApplication, patchApplication } from "~/lib/applications-api";
 import type { ApiApproval } from "~/lib/approvals-api";
 import { listApprovals, createApproval } from "~/lib/approvals-api";
 import {
-  getBodyApprovalChipDisplay,
+  getGovernanceChipTriple,
   hasUnderReviewApprovalForBody,
   immigrationCanEditApplication,
   isLatestImmigrationTerminal,
+  isLatestPrimaryBodyApproved,
   isLatestSrcTerminal,
-  isLatestZifaApproved,
   shouldAutoCreateImmigrationUnderReview,
   shouldAutoCreateSrcUnderReview,
   srcCanEditApplication,
 } from "~/lib/approver-approval-helpers";
-import { getCurrentUser, normalizeApproverBody } from "~/lib/auth";
+import { apiFetchJson, getCurrentUser, persistStoredSessionUser } from "~/lib/auth";
+import { meResponseToAuthUser, reviewerRoutingBodyFromSession } from "~/lib/users-api";
+import {
+  isPrimaryStageStatus,
+  resolvePrimaryBodyFromOrgSport,
+  reviewerPrimaryCodesEqual,
+  routingSportForApplication,
+} from "~/lib/sport-routing";
+import { listSportBodies } from "~/lib/sport-bodies-api";
+import { listZimbabweSports } from "~/lib/zimbabwe-sports-api";
 import { formatIsoDate, formatDateTime, labelEventType } from "~/lib/application-display";
 import { getOrganisation, organisationDisplayName } from "~/lib/organisations-api";
 import { apiPersonnelToRow, type TravelPersonnelRow } from "~/lib/travel-personnel-types";
@@ -27,7 +36,7 @@ import { apiPersonnelToRow, type TravelPersonnelRow } from "~/lib/travel-personn
 type DecisionAction = "approved" | "rejected" | "information_requested";
 type SrcDecisionAction = "awaiting_information" | "awaiting_immigration" | "rejected";
 type ImmigrationDecisionAction = "approved" | "rejected" | "information_requested";
-type ReviewerBody = "ZIFA" | "SRC" | "IMMIGRATION" | null;
+type ReviewerBody = string | null;
 
 function str(v: string | null | undefined | number | boolean): string {
   if (v === null || v === undefined) return "";
@@ -35,40 +44,43 @@ function str(v: string | null | undefined | number | boolean): string {
   return String(v).trim();
 }
 
-/** ZIFA may record a final decision only while the application is still `awaiting_zifa`. After `awaiting_src`, SRC owns the queue. */
-function zifaCanEditApplication(app: ApiApplication): boolean {
-  return (app.status ?? "").trim().toLowerCase() === "awaiting_zifa";
+/** First-line sport body may record decisions only while the application is in a primary-stage status. */
+function primaryStageCanEditApplication(app: ApiApplication): boolean {
+  return isPrimaryStageStatus(app.status);
 }
 
-function zifaReadOnlyExplanation(status: string | undefined): { title: string; body: string } {
+function primaryReadOnlyExplanation(
+  status: string | undefined,
+  primaryLabel: string,
+): { title: string; body: string } {
   const s = (status ?? "").trim().toLowerCase();
   if (s === "awaiting_src") {
     return {
       title: "With SRC now",
-      body: "ZIFA’s review is complete. This application is with SRC — you cannot submit further ZIFA decisions here.",
+      body: `${primaryLabel}’s review is complete. This application is with SRC — you cannot submit further ${primaryLabel} decisions here.`,
     };
   }
   if (s === "rejected") {
     return {
       title: "Not editable",
-      body: "This application is no longer open for ZIFA decisions.",
+      body: `This application is no longer open for ${primaryLabel} decisions.`,
     };
   }
   if (s === "information_requested") {
     return {
       title: "Awaiting applicant",
-      body: "Information was requested from the applicant. You can review the dossier below; new official decisions from ZIFA will be available when the application is submitted again for review.",
+      body: `Information was requested from the applicant. You can review the dossier below; new official decisions from ${primaryLabel} will be available when the application is submitted again for review.`,
     };
   }
   if (s === "approved") {
     return {
       title: "Approved",
-      body: "This application has completed approval. No further ZIFA changes apply.",
+      body: "This application has completed approval. No further first-line body changes apply.",
     };
   }
   return {
     title: "Read-only",
-    body: "This application cannot be edited from the ZIFA reviewer screen.",
+    body: `This application cannot be edited from the ${primaryLabel} reviewer screen.`,
   };
 }
 
@@ -102,15 +114,17 @@ function successMessageForImmigrationDecision(action: ImmigrationDecisionAction)
   return "Decision saved: rejected.";
 }
 
-function processingPortalTitle(body: ReviewerBody): string {
+function processingPortalTitle(body: ReviewerBody, primaryLabel: string): string {
   if (body === "SRC") return "Official Approver Portal - SRC Queue";
   if (body === "IMMIGRATION") return "Official Approver Portal - Immigration Queue";
-  return "Official Approver Portal - ZIFA Queue";
+  return `Official Approver Portal - ${primaryLabel} Queue`;
 }
 
 function srcReadOnlyExplanation(
   app: ApiApplication,
   approvals: ApiApproval[],
+  primaryBodyCode: string,
+  primaryLabel: string,
 ): { title: string; body: string } {
   const st = (app.status ?? "").trim().toLowerCase();
   if (st !== "awaiting_src") {
@@ -119,10 +133,10 @@ function srcReadOnlyExplanation(
       body: "SRC actions are available when the application status is awaiting SRC.",
     };
   }
-  if (!isLatestZifaApproved(approvals)) {
+  if (!isLatestPrimaryBodyApproved(approvals, primaryBodyCode)) {
     return {
-      title: "Awaiting ZIFA",
-      body: "Open this file once ZIFA has recorded an approval on the application.",
+      title: `Awaiting ${primaryLabel}`,
+      body: `Open this file once ${primaryLabel} has recorded an approval on the application.`,
     };
   }
   if (isLatestSrcTerminal(approvals)) {
@@ -160,6 +174,12 @@ function immigrationReadOnlyExplanation(
   };
 }
 
+/** True when the signed-in reviewer’s routing token matches the application’s first-line body code. */
+function primaryReviewerMatchesApplication(reviewer: ReviewerBody, primaryCode: string): boolean {
+  if (reviewer == null || reviewer === "" || !primaryCode) return false;
+  return reviewerPrimaryCodesEqual(primaryCode, reviewer);
+}
+
 function submittedDays(app: ApiApplication): string {
   const iso = app.submitted_at ?? app.created_at;
   if (!iso) return "";
@@ -177,6 +197,7 @@ export default component$(() => {
   const loadError = useSignal<string | null>(null);
   const application = useSignal<ApiApplication | null>(null);
   const organisationName = useSignal<string>("");
+  const organisationSport = useSignal<string>("");
   const personnel = useSignal<TravelPersonnelRow[]>([]);
 
   const actionSelected = useSignal<DecisionAction | null>(null);
@@ -188,6 +209,8 @@ export default component$(() => {
   const successToast = useSignal<string | null>(null);
   const approvals = useSignal<ApiApproval[]>([]);
   const reviewerBody = useSignal<ReviewerBody>(null);
+  const primaryBodyCode = useSignal("ZIFA");
+  const primaryBodyLabel = useSignal("ZIFA");
 
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(async () => {
@@ -196,8 +219,6 @@ export default component$(() => {
       loadError.value = "No application ID provided.";
       return;
     }
-
-    reviewerBody.value = normalizeApproverBody(getCurrentUser()?.body) as ReviewerBody;
 
     loading.value = true;
     loadError.value = null;
@@ -222,25 +243,58 @@ export default component$(() => {
       organisationName.value = orgR.ok
         ? organisationDisplayName(orgR.data).trim() || "—"
         : "—";
+      if (orgR.ok) {
+        const sp = orgR.data.sport;
+        organisationSport.value =
+          sp != null && String(sp).trim() !== "" ? String(sp).trim() : "";
+      } else {
+        organisationSport.value = "";
+      }
     } else {
       organisationName.value = "—";
+      organisationSport.value = "";
     }
+
+    const [zsR, sbR] = await Promise.all([
+      listZimbabweSports({ limit: 200, offset: 0 }),
+      listSportBodies({ limit: 200, offset: 0 }),
+    ]);
+    const zs = zsR.ok ? zsR.data : [];
+    const sb = sbR.ok ? sbR.data : [];
+
+    const meR = await apiFetchJson<unknown>("/api/v1/me", { method: "GET" });
+    if (meR.ok) {
+      persistStoredSessionUser(meResponseToAuthUser(meR.data));
+    }
+
+    reviewerBody.value = reviewerRoutingBodyFromSession(getCurrentUser(), sb) as ReviewerBody;
+    const resolved = resolvePrimaryBodyFromOrgSport(
+      routingSportForApplication(appR.data.sport, organisationSport.value),
+      zs,
+      sb,
+    );
+    primaryBodyCode.value = resolved.code;
+    primaryBodyLabel.value = resolved.label;
 
     let approvalRows: ApiApproval[] = apprR.ok ? apprR.data : [];
 
-    // Only while still `awaiting_zifa`: POST `under_review` once per ZIFA reviewer (first open only).
-    // Never duplicate `createApproval` if a row for this body already has `under_review` (approval marker).
-    if (apprR.ok && zifaCanEditApplication(appR.data) && !hasUnderReviewApprovalForBody(approvalRows, "ZIFA")) {
+    const primaryCode = primaryBodyCode.value;
+    // Primary stage: POST `under_review` once per first-line body (first open only).
+    if (
+      apprR.ok &&
+      primaryStageCanEditApplication(appR.data) &&
+      !hasUnderReviewApprovalForBody(approvalRows, primaryCode)
+    ) {
       await createApproval({
         application_id: id,
-        body: "ZIFA",
+        body: primaryCode,
         status: "under_review",
       });
       const refetch = await listApprovals({ application_id: id, limit: 50, offset: 0 });
       if (refetch.ok) approvalRows = refetch.data;
     }
 
-    if (apprR.ok && reviewerBody.value === "SRC" && shouldAutoCreateSrcUnderReview(appR.data, approvalRows)) {
+    if (apprR.ok && reviewerBody.value === "SRC" && shouldAutoCreateSrcUnderReview(appR.data, approvalRows, primaryCode)) {
       await createApproval({
         application_id: id,
         body: "SRC",
@@ -269,6 +323,7 @@ export default component$(() => {
   });
 
   const app = application.value;
+  const routingSportLabel = app ? routingSportForApplication(app.sport, organisationSport.value) : "";
 
   return (
     <div class="flex flex-1 flex-col min-h-0 min-w-0 bg-background text-on-background">
@@ -294,7 +349,10 @@ export default component$(() => {
         </div>
       ) : null}
 
-      <ApproverPortalNav activeItem="pendingQueue" title={processingPortalTitle(reviewerBody.value)} />
+      <ApproverPortalNav
+        activeItem="pendingQueue"
+        title={processingPortalTitle(reviewerBody.value, primaryBodyLabel.value)}
+      />
 
       <main class="flex-1 min-h-0 min-w-0 w-full">
         <div class="pt-24 px-4 pb-8 sm:px-6 sm:pb-12 lg:px-8">
@@ -330,9 +388,17 @@ export default component$(() => {
                         <span class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-0.5">
                           Organisation
                         </span>
-                        <div class="flex items-center gap-2">
-                          <span class="material-symbols-outlined text-secondary text-lg">domain</span>
-                          <span class="font-bold text-xl text-on-surface">{organisationName.value}</span>
+                        <div class="flex flex-col gap-1">
+                          <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-secondary text-lg">domain</span>
+                            <span class="font-bold text-xl text-on-surface">{organisationName.value}</span>
+                          </div>
+                          {routingSportLabel ? (
+                            <p class="text-sm text-on-surface-variant pl-8">
+                              Sport:{" "}
+                              <span class="font-semibold text-on-surface">{routingSportLabel}</span>
+                            </p>
+                          ) : null}
                         </div>
                       </div>
                       <div>
@@ -363,15 +429,15 @@ export default component$(() => {
 
                   <div class="w-full md:w-auto md:text-right">
                     <div class="mb-4 flex flex-wrap gap-2 md:justify-end">
-                      {(["ZIFA", "SRC", "IMMIGRATION"] as const).map((body) => {
-                        const chip = getBodyApprovalChipDisplay(approvals.value, body);
-                        return (
-                          <div key={body} class={chip.chipClass}>
-                            <span class="material-symbols-outlined text-[14px]">{chip.icon}</span>
-                            {body}: {chip.label}
-                          </div>
-                        );
-                      })}
+                      {getGovernanceChipTriple(approvals.value, {
+                        code: primaryBodyCode.value,
+                        label: primaryBodyLabel.value,
+                      }).chips.map((chip) => (
+                        <div key={chip.key} class={chip.chipClass}>
+                          <span class="material-symbols-outlined text-[14px]">{chip.icon}</span>
+                          {chip.label}
+                        </div>
+                      ))}
                     </div>
                     <div class="inline-block w-full rounded-xl bg-surface-container px-4 py-2 text-xs font-medium text-on-surface-variant md:w-auto">
                       Submitted:{" "}
@@ -488,6 +554,9 @@ export default component$(() => {
                         <div>
                           <div class="text-xs text-outline mb-1 font-bold">ORGANISATION</div>
                           <div class="font-semibold">{organisationName.value}</div>
+                          {routingSportLabel ? (
+                            <div class="text-xs text-on-surface-variant mt-1">Sport: {routingSportLabel}</div>
+                          ) : null}
                         </div>
                       ) : null}
                       {str(app.event_type) ? (
@@ -573,14 +642,18 @@ export default component$(() => {
                       Official Decision
                     </h3>
 
-                    {(reviewerBody.value ?? "ZIFA") === "SRC" ? (
+                    {reviewerBody.value === "SRC" ? (
                       <>
-                        {app && !srcCanEditApplication(app, approvals.value) ? (
+                        {app && !srcCanEditApplication(app, approvals.value, primaryBodyCode.value) ? (
                           <div class="rounded-xl border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
                             <p class="text-[10px] font-bold uppercase tracking-widest text-secondary mb-2">
-                              {srcReadOnlyExplanation(app, approvals.value).title}
+                              {srcReadOnlyExplanation(app, approvals.value, primaryBodyCode.value, primaryBodyLabel.value)
+                                .title}
                             </p>
-                            <p class="text-white/85">{srcReadOnlyExplanation(app, approvals.value).body}</p>
+                            <p class="text-white/85">
+                              {srcReadOnlyExplanation(app, approvals.value, primaryBodyCode.value, primaryBodyLabel.value)
+                                .body}
+                            </p>
                           </div>
                         ) : (
                           <div class="space-y-4 mb-8">
@@ -681,13 +754,18 @@ export default component$(() => {
                           </p>
                         ) : null}
 
-                        {app && srcCanEditApplication(app, approvals.value) ? (
+                        {app && srcCanEditApplication(app, approvals.value, primaryBodyCode.value) ? (
                           <button
                             class="w-full bg-secondary-container text-on-secondary-container py-4 rounded-xl font-extrabold tracking-tight hover:shadow-[0_0_20px_rgba(253,208,0,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                             type="button"
                             disabled={srcActionSelected.value === null || submitting.value}
                             onClick$={async () => {
-                              if (!srcActionSelected.value || !app || !srcCanEditApplication(app, approvals.value)) return;
+                              if (
+                                !srcActionSelected.value ||
+                                !app ||
+                                !srcCanEditApplication(app, approvals.value, primaryBodyCode.value)
+                              )
+                                return;
                               const user = getCurrentUser();
                               submitting.value = true;
                               submitError.value = null;
@@ -742,14 +820,14 @@ export default component$(() => {
                           </button>
                         ) : null}
 
-                        {app && srcCanEditApplication(app, approvals.value) ? (
+                        {app && srcCanEditApplication(app, approvals.value, primaryBodyCode.value) ? (
                           <div class="mt-6 flex items-center gap-2 text-[10px] text-white/40 justify-center">
                             <span class="material-symbols-outlined text-xs">info</span>
                             This action will be logged under your SRC reviewer account
                           </div>
                         ) : null}
                       </>
-                    ) : (reviewerBody.value ?? "ZIFA") === "IMMIGRATION" ? (
+                    ) : reviewerBody.value === "IMMIGRATION" ? (
                       <>
                         {app && !immigrationCanEditApplication(app, approvals.value) ? (
                           <div class="rounded-xl border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
@@ -923,12 +1001,22 @@ export default component$(() => {
                       </>
                     ) : (
                       <>
-                        {app && !zifaCanEditApplication(app) ? (
+                        {app &&
+                        (!primaryStageCanEditApplication(app) ||
+                          !primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value)) ? (
                           <div class="rounded-xl border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
                             <p class="text-[10px] font-bold uppercase tracking-widest text-secondary mb-2">
-                              {zifaReadOnlyExplanation(app.status).title}
+                              {primaryStageCanEditApplication(app) &&
+                              !primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value)
+                                ? "Different reviewer body"
+                                : primaryReadOnlyExplanation(app.status, primaryBodyLabel.value).title}
                             </p>
-                            <p class="text-white/85">{zifaReadOnlyExplanation(app.status).body}</p>
+                            <p class="text-white/85">
+                              {primaryStageCanEditApplication(app) &&
+                              !primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value)
+                                ? `This dossier is queued for ${primaryBodyLabel.value} first-line review.`
+                                : primaryReadOnlyExplanation(app.status, primaryBodyLabel.value).body}
+                            </p>
                           </div>
                         ) : (
                           <div class="space-y-4 mb-8">
@@ -1029,20 +1117,28 @@ export default component$(() => {
                           </p>
                         ) : null}
 
-                        {app && zifaCanEditApplication(app) ? (
+                        {app &&
+                        primaryStageCanEditApplication(app) &&
+                        primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value) ? (
                           <button
                             class="w-full bg-secondary-container text-on-secondary-container py-4 rounded-xl font-extrabold tracking-tight hover:shadow-[0_0_20px_rgba(253,208,0,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                             type="button"
                             disabled={actionSelected.value === null || submitting.value}
                             onClick$={async () => {
-                              if (!actionSelected.value || !app || !zifaCanEditApplication(app)) return;
+                              if (
+                                !actionSelected.value ||
+                                !app ||
+                                !primaryStageCanEditApplication(app) ||
+                                !primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value)
+                              )
+                                return;
                               const user = getCurrentUser();
                               submitting.value = true;
                               submitError.value = null;
 
                               const approvalR = await createApproval({
                                 application_id: id,
-                                body: "ZIFA",
+                                body: primaryBodyCode.value,
                                 status: actionSelected.value,
                                 decided_at: new Date().toISOString(),
                                 decided_by: user?.id ?? null,
@@ -1085,10 +1181,12 @@ export default component$(() => {
                           </button>
                         ) : null}
 
-                        {app && zifaCanEditApplication(app) ? (
+                        {app &&
+                        primaryStageCanEditApplication(app) &&
+                        primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value) ? (
                           <div class="mt-6 flex items-center gap-2 text-[10px] text-white/40 justify-center">
                             <span class="material-symbols-outlined text-xs">info</span>
-                            This action will be logged under your ZIFA reviewer account
+                            This action will be logged under your {primaryBodyLabel.value} reviewer account
                           </div>
                         ) : null}
                       </>

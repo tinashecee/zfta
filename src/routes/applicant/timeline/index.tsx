@@ -225,7 +225,7 @@ export default component$(() => {
             Digital Signature Verification
           </a>
         </div>
-        <p class="text-[10px] font-medium">© 2025 Zimbabwe Football Travel Authority. All rights reserved.</p>
+        <p class="text-[10px] font-medium">© 2025 Zimbabwe Sports Travel Authority. All rights reserved.</p>
       </footer>
     </div>
   );

@@ -24,7 +24,8 @@ export type TravelPersonnelInput = {
   national_id_number?: string | null;
   passport_number?: string | null;
   passport_expiry?: string | null;
-  role: PersonnelRole;
+  /** Free text (e.g. from spreadsheet); `player` vs other values drive application player/official counts. */
+  role: string;
   position?: string | null;
   status?: PersonnelStatus;
 };
@@ -68,14 +69,14 @@ export function newPersonnelRow(partial?: Partial<TravelPersonnelInput>): Travel
  * Derive `player_count` / `officials_count` for the application payload from roster roles so they
  * match what the API expects (players vs coach/medical/admin).
  */
-export function personnelRoleCountsForApplication(rows: readonly { role: PersonnelRole }[]): {
+export function personnelRoleCountsForApplication(rows: readonly { role: string }[]): {
   player_count: number;
   officials_count: number;
 } {
   let player_count = 0;
   let officials_count = 0;
   for (const row of rows) {
-    if (row.role === "player") player_count += 1;
+    if (String(row.role ?? "").trim().toLowerCase() === "player") player_count += 1;
     else officials_count += 1;
   }
   return { player_count, officials_count };
@@ -86,7 +87,7 @@ export function rowToPayload(row: TravelPersonnelRow): TravelPersonnelInput {
     full_name: row.full_name.trim(),
     gender: row.gender,
     date_of_birth: row.date_of_birth,
-    role: row.role,
+    role: row.role.trim(),
     status: row.status ?? "active",
   };
   const nid = row.national_id_number?.trim();

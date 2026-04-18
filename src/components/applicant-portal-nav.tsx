@@ -27,7 +27,7 @@ const NAV_ITEMS: Array<{
     icon: "corporate_fare",
     href: "/applicant/organization-profile/",
   },
-  { key: "settings", label: "Settings", icon: "settings", href: "#" },
+  { key: "settings", label: "Settings", icon: "settings", href: "/applicant/settings/" },
 ];
 
 export const ApplicantPortalNav = component$<ApplicantPortalNavProps>(({ activeItem }) => {
@@ -70,10 +70,10 @@ export const ApplicantPortalNav = component$<ApplicantPortalNavProps>(({ activeI
           </button>
 
           <span class="text-lg font-bold tracking-tighter text-emerald-50 uppercase font-headline hidden md:inline">
-            Zimbabwe Football Travel Authority
+            Zimbabwe Sports Travel Authority
           </span>
           <span class="text-lg font-bold tracking-tighter text-emerald-50 uppercase font-headline md:hidden">
-            ZFTA
+            ZSTA
           </span>
         </div>
 
@@ -133,7 +133,7 @@ export const ApplicantPortalNav = component$<ApplicantPortalNavProps>(({ activeI
             </div>
 
             <div class="flex flex-col">
-              <span class="text-2xl font-black text-emerald-50 uppercase tracking-widest">ZFTA Portal</span>
+              <span class="text-2xl font-black text-emerald-50 uppercase tracking-widest">ZSTA Portal</span>
               <span class="text-emerald-100/60 text-xs font-bold mt-1">Diplomatic Pitch</span>
             </div>
 

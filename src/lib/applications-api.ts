@@ -19,6 +19,8 @@ export type ApiApplication = {
   travel_documents?: string | null;
   applicant_id?: string;
   organisation_id?: string;
+  /** Sport / discipline for routing (varchar on API). */
+  sport?: string | null;
   status?: string;
   priority?: string;
   priority_reason?: string | null;
@@ -74,14 +76,27 @@ export async function uploadApplicationAttachments(files: {
   return apiFetchFormData<ApplicationAttachmentUploadResponse>("/api/v1/applications/attachments", fd);
 }
 
+/** Accept snake_case or common JSON aliases for routing field `sport`. */
+function normalizeApplicationJson(raw: unknown): ApiApplication {
+  const row = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const base = { ...row } as ApiApplication;
+  if (base.sport == null || String(base.sport).trim() === "") {
+    const alt = row["Sport"] ?? row["sport_name"] ?? row["sportName"];
+    if (alt != null && String(alt).trim() !== "") base.sport = String(alt).trim();
+  }
+  return base;
+}
+
 function unwrapApplications(data: unknown): ApiApplication[] {
-  if (Array.isArray(data)) return data as ApiApplication[];
+  const mapRows = (rows: unknown[]): ApiApplication[] =>
+    rows.map((x) => normalizeApplicationJson(x));
+  if (Array.isArray(data)) return mapRows(data);
   if (data && typeof data === "object") {
     const o = data as Record<string, unknown>;
-    if (Array.isArray(o.items)) return o.items as ApiApplication[];
-    if (Array.isArray(o.applications)) return o.applications as ApiApplication[];
-    if (Array.isArray(o.data)) return o.data as ApiApplication[];
-    if (Array.isArray(o.results)) return o.results as ApiApplication[];
+    if (Array.isArray(o.items)) return mapRows(o.items);
+    if (Array.isArray(o.applications)) return mapRows(o.applications);
+    if (Array.isArray(o.data)) return mapRows(o.data);
+    if (Array.isArray(o.results)) return mapRows(o.results);
   }
   return [];
 }
@@ -98,7 +113,11 @@ export async function listApplications(params?: { limit?: number; offset?: numbe
 }
 
 export async function getApplication(id: string) {
-  return apiFetchJson<ApiApplication>(`/api/v1/applications/${encodeURIComponent(id)}`, { method: "GET" });
+  const r = await apiFetchJson<ApiApplication>(`/api/v1/applications/${encodeURIComponent(id)}`, {
+    method: "GET",
+  });
+  if (!r.ok) return r;
+  return { ok: true as const, data: normalizeApplicationJson(r.data) };
 }
 
 /**
@@ -113,17 +132,21 @@ export async function createApplication(body: {
     ...body.application,
     personnel: body.personnel,
   };
-  return apiFetchJson<ApiApplication>("/api/v1/applications", {
+  const r = await apiFetchJson<ApiApplication>("/api/v1/applications", {
     method: "POST",
     body: JSON.stringify(payload),
   });
+  if (!r.ok) return r;
+  return { ok: true as const, data: normalizeApplicationJson(r.data) };
 }
 
 export async function patchApplication(id: string, patch: Record<string, unknown>) {
-  return apiFetchJson<ApiApplication>(`/api/v1/applications/${encodeURIComponent(id)}`, {
+  const r = await apiFetchJson<ApiApplication>(`/api/v1/applications/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
   });
+  if (!r.ok) return r;
+  return { ok: true as const, data: normalizeApplicationJson(r.data) };
 }
 
 export async function deleteApplication(id: string) {
