@@ -16,7 +16,7 @@ export default component$(() => {
     currentUser.value = getCurrentUser();
     if (location.url.searchParams.get("error") === "approver") {
       error.value =
-        "Approver profile is missing a valid body (sport body code, SRC, or IMMIGRATION). Please contact support.";
+        "Approver profile is missing a valid body (sport body code or SRC). Please contact support.";
     }
   });
 

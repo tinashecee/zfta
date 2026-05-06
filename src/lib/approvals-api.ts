@@ -9,8 +9,14 @@ export type ApiApproval = {
   application_id: string;
   assigned_to?: string | null;
   status?: string;
-  /** Reviewer body, e.g. ZIFA, SRC, IMMIGRATION */
+  /**
+   * Reviewer body enum on newer APIs (e.g. SPORT_BODY, SRC, IMMIGRATION),
+   * or legacy sport-body code on older APIs.
+   */
   body?: string | null;
+  /** Optional extra routing fields on newer APIs (if present). */
+  body_code?: string | null;
+  sports_body?: string | null;
   notes?: string | null;
   decision?: string | null;
   /** Set when a decision is recorded (TIMESTAMPTZ from API). */

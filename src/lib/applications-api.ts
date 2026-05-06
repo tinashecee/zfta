@@ -7,6 +7,31 @@ export type ApplicationAttachmentUploadResponse = {
   travel_documents: string | null;
 };
 
+export type OutgoingTourUploadResponse = {
+  compliance_declaration_doc: string | null;
+  invitation_letter_doc: string | null;
+  national_assoc_clearance_doc: string | null;
+  funding_proof_doc: string | null;
+  liabilities_breakdown_doc: string | null;
+};
+
+export type OutgoingTourComplianceUploadResponse = {
+  compliance_declaration_doc: string | null;
+};
+
+export type IncomingTourUploadResponse = {
+  statutory_compliance_declaration_doc: string | null;
+  funding_proof_doc: string | null;
+};
+
+export type HostingCompetitionUploadResponse = {
+  hosting_plan_doc: string | null;
+  budget_doc: string | null;
+  funding_proof_doc: string | null;
+  roll_out_plan_doc: string | null;
+  organising_committee_doc: string | null;
+};
+
 /**
  * Application row from API — list items omit `personnel`; GET single includes it.
  * Field names follow backend (snake_case).
@@ -17,11 +42,20 @@ export type ApiApplication = {
   /** Stored file paths from attachment upload. */
   support_documents?: string | null;
   travel_documents?: string | null;
+  compliance_declaration_doc?: string | null;
+  statutory_compliance_declaration_doc?: string | null;
+  invitation_letter_doc?: string | null;
+  national_assoc_clearance_doc?: string | null;
+  passport_pack_doc?: string | null;
+  funding_proof_doc?: string | null;
+  liabilities_breakdown_doc?: string | null;
   applicant_id?: string;
   organisation_id?: string;
   /** Sport / discipline for routing (varchar on API). */
   sport?: string | null;
   status?: string;
+  /** Client / future API: outgoing_tour | incoming_tour | hosting_competition */
+  application_type?: string | null;
   priority?: string;
   priority_reason?: string | null;
   event_type?: string;
@@ -74,6 +108,58 @@ export async function uploadApplicationAttachments(files: {
   if (files.support_document) fd.append("support_document", files.support_document);
   if (files.travel_document) fd.append("travel_document", files.travel_document);
   return apiFetchFormData<ApplicationAttachmentUploadResponse>("/api/v1/applications/attachments", fd);
+}
+
+export async function uploadOutgoingTourDocuments(files: {
+  compliance_declaration: File;
+  invitation_letter: File;
+  national_assoc_clearance: File;
+  funding_proof: File;
+  liabilities_breakdown: File;
+}): Promise<{ ok: true; data: OutgoingTourUploadResponse } | { ok: false; status: number; error: string }> {
+  const fd = new FormData();
+  fd.append("compliance_declaration", files.compliance_declaration);
+  fd.append("invitation_letter", files.invitation_letter);
+  fd.append("national_assoc_clearance", files.national_assoc_clearance);
+  fd.append("funding_proof", files.funding_proof);
+  fd.append("liabilities_breakdown", files.liabilities_breakdown);
+  return apiFetchFormData<OutgoingTourUploadResponse>("/api/v1/outgoing-tours/uploads", fd);
+}
+
+export async function uploadOutgoingTourComplianceDeclaration(files: {
+  compliance_declaration: File;
+}): Promise<
+  { ok: true; data: OutgoingTourComplianceUploadResponse } | { ok: false; status: number; error: string }
+> {
+  const fd = new FormData();
+  fd.append("compliance_declaration", files.compliance_declaration);
+  return apiFetchFormData<OutgoingTourComplianceUploadResponse>("/api/v1/outgoing-tours/uploads/compliance", fd);
+}
+
+export async function uploadIncomingTourDocuments(files: {
+  statutory_compliance_declaration: File;
+  funding_proof: File;
+}): Promise<{ ok: true; data: IncomingTourUploadResponse } | { ok: false; status: number; error: string }> {
+  const fd = new FormData();
+  fd.append("statutory_compliance_declaration", files.statutory_compliance_declaration);
+  fd.append("funding_proof", files.funding_proof);
+  return apiFetchFormData<IncomingTourUploadResponse>("/api/v1/incoming-tours/uploads", fd);
+}
+
+export async function uploadHostingCompetitionDocuments(files: {
+  hosting_plan: File;
+  budget: File;
+  funding_proof: File;
+  roll_out_plan: File;
+  organising_committee_composition: File;
+}): Promise<{ ok: true; data: HostingCompetitionUploadResponse } | { ok: false; status: number; error: string }> {
+  const fd = new FormData();
+  fd.append("hosting_plan", files.hosting_plan);
+  fd.append("budget", files.budget);
+  fd.append("funding_proof", files.funding_proof);
+  fd.append("roll_out_plan", files.roll_out_plan);
+  fd.append("organising_committee_composition", files.organising_committee_composition);
+  return apiFetchFormData<HostingCompetitionUploadResponse>("/api/v1/hosting-competitions/uploads", fd);
 }
 
 /** Accept snake_case or common JSON aliases for routing field `sport`. */
@@ -133,6 +219,55 @@ export async function createApplication(body: {
     personnel: body.personnel,
   };
   const r = await apiFetchJson<ApiApplication>("/api/v1/applications", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) return r;
+  return { ok: true as const, data: normalizeApplicationJson(r.data) };
+}
+
+export async function createOutgoingTour(body: {
+  application: Record<string, unknown>;
+  personnel: TravelPersonnelInput[];
+}) {
+  // Outgoing tours endpoint expects a flat JSON body (not nested under `application`).
+  const payload: Record<string, unknown> = {
+    ...body.application,
+    ...(Array.isArray(body.personnel) && body.personnel.length ? { personnel: body.personnel } : {}),
+  };
+  const r = await apiFetchJson<ApiApplication>("/api/v1/outgoing-tours", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) return r;
+  return { ok: true as const, data: normalizeApplicationJson(r.data) };
+}
+
+export async function createIncomingTour(body: {
+  application: Record<string, unknown>;
+  personnel: TravelPersonnelInput[];
+}) {
+  const payload: Record<string, unknown> = {
+    ...body.application,
+    personnel: body.personnel,
+  };
+  const r = await apiFetchJson<ApiApplication>("/api/v1/incoming-tours", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) return r;
+  return { ok: true as const, data: normalizeApplicationJson(r.data) };
+}
+
+export async function createHostingCompetition(body: {
+  application: Record<string, unknown>;
+  personnel: TravelPersonnelInput[];
+}) {
+  const payload: Record<string, unknown> = {
+    ...body.application,
+    personnel: body.personnel,
+  };
+  const r = await apiFetchJson<ApiApplication>("/api/v1/hosting-competitions", {
     method: "POST",
     body: JSON.stringify(payload),
   });

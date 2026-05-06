@@ -15,6 +15,12 @@ export function buildApplicationRecordFromForm(
       | "awaiting_zifa"
       | "awaiting_primary_body"
       | "awaiting_sport_body";
+    /** Until backend adds a column; API may ignore unknown keys. */
+    application_type?: string | null;
+    /** Free-text purpose / benefits (maps to API `event_description` when set). */
+    event_description?: string | null;
+    /** e.g. accommodation establishment for incoming tours (maps to API `training_facility_name`). */
+    training_facility_name?: string | null;
   },
 ): Record<string, unknown> {
   const event_type = String(fd.get("event_type") ?? "tournament").trim();
@@ -34,7 +40,9 @@ export function buildApplicationRecordFromForm(
   const declaration_accepted = fd.get("declaration_accepted") === "on";
   const opponent_team_name = String(fd.get("opponent_team_name") ?? "").trim() || null;
   const opponent_team_country = String(fd.get("opponent_team_country") ?? "").trim() || null;
+  const training_facility_name_from_form = String(fd.get("training_facility_name") ?? "").trim() || null;
   const event_display_name_custom = String(fd.get("event_display_name") ?? "").trim();
+  const event_description_from_form = String(fd.get("event_description") ?? "").trim() || null;
   const sport =
     opts.sport !== undefined
       ? String(opts.sport ?? "").trim().slice(0, 255) || null
@@ -51,7 +59,12 @@ export function buildApplicationRecordFromForm(
     return `${event_type} — ${host_country}`.trim() || "Travel authorization";
   })();
 
-  return {
+  const training_facility_name =
+    opts.training_facility_name != null && String(opts.training_facility_name).trim() !== ""
+      ? String(opts.training_facility_name).trim()
+      : training_facility_name_from_form;
+
+  const base: Record<string, unknown> = {
     organisation_id: String(opts.organisation_id).trim(),
     sport,
     event_type,
@@ -59,6 +72,7 @@ export function buildApplicationRecordFromForm(
     tournament_name_other: tn === "Other" ? tournament_name_other : null,
     opponent_team_name,
     opponent_team_country,
+    ...(training_facility_name ? { training_facility_name } : {}),
     event_display_name,
     host_country,
     host_city,
@@ -80,4 +94,15 @@ export function buildApplicationRecordFromForm(
     status: opts.status ?? "awaiting_body",
     priority: "normal",
   };
+
+  const desc =
+    opts.event_description != null && String(opts.event_description).trim() !== ""
+      ? String(opts.event_description).trim()
+      : event_description_from_form;
+  if (desc) base.event_description = desc;
+
+  const at = opts.application_type != null ? String(opts.application_type).trim() : "";
+  if (at) base.application_type = at;
+
+  return base;
 }

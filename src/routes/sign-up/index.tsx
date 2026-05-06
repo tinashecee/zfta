@@ -26,7 +26,7 @@ type SignUpFormState = {
   full_name: string;
   mobile_number: string;
   role: SignUpRole;
-  /** `SPORTS_BODY` | `SRC` | `IMMIGRATION` or "" */
+  /** `SPORTS_BODY` | `SRC` or "" */
   approver_body: string;
   /** Sport-body row id as string when `approver_body` is SPORTS_BODY */
   sports_body: string;

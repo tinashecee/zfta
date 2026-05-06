@@ -11,8 +11,18 @@ function ts(iso?: string | null): number {
 /** Case-insensitive match for approval `body` (supports legacy substring rows). */
 export function approvalBodyMatches(a: ApiApproval, bodyCode: string): boolean {
   const want = bodyCode.trim().toUpperCase();
+  if (!want) return false;
+
+  // Newer APIs may store the specific sport-body code separately from the enum `body`.
+  const gotCode = (a.body_code ?? "").trim().toUpperCase();
+  if (gotCode) {
+    if (gotCode === want) return true;
+    if (gotCode.includes(want) || want.includes(gotCode)) return true;
+    return false;
+  }
+
   const got = (a.body ?? "").trim().toUpperCase();
-  if (!got || !want) return false;
+  if (!got) return false;
   if (got === want) return true;
   if (got.includes(want) || want.includes(got)) return true;
   return false;
@@ -92,12 +102,17 @@ export function isLatestSrcTerminal(approvals: ApiApproval[] | null | undefined)
   return st === "approved" || st === "rejected";
 }
 
-/** Latest IMMIGRATION row is terminal (final approve or reject for this file). */
-export function isLatestImmigrationTerminal(approvals: ApiApproval[] | null | undefined): boolean {
-  const s = getLatestApprovalForBodyCode(approvals, "IMMIGRATION");
-  if (!s) return false;
-  const st = (s.status ?? "").trim().toLowerCase();
-  return st === "approved" || st === "rejected";
+/**
+ * New API rule (simplified): SRC may act once there is any SPORT_BODY approval row marked approved.
+ * This ignores per-sport-body routing codes.
+ */
+export function hasAnySportBodyApproved(approvals: ApiApproval[] | null | undefined): boolean {
+  if (!approvals?.length) return false;
+  return approvals.some((a) => {
+    const body = (a.body ?? "").trim().toUpperCase();
+    const st = (a.status ?? "").trim().toLowerCase();
+    return body === "SPORT_BODY" && st === "approved";
+  });
 }
 
 /**
@@ -111,7 +126,9 @@ export function srcCanEditApplication(
 ): boolean {
   const as = (app.status ?? "").trim().toLowerCase();
   if (as !== "awaiting_src") return false;
-  if (!isLatestPrimaryBodyApproved(approvals, primaryBodyCode)) return false;
+  // Simplified gating: allow SRC once any SPORT_BODY approval row is approved.
+  // (primaryBodyCode kept only for backwards-compat callers)
+  if (!hasAnySportBodyApproved(approvals)) return false;
   if (isLatestSrcTerminal(approvals)) return false;
   return true;
 }
@@ -123,28 +140,6 @@ export function shouldAutoCreateSrcUnderReview(
 ): boolean {
   if (!srcCanEditApplication(app, approvals, primaryBodyCode)) return false;
   return !hasUnderReviewApprovalForBody(approvals, "SRC");
-}
-
-/**
- * Immigration may record a final decision only while the application is awaiting immigration
- * review and there is no terminal IMMIGRATION approval row yet.
- */
-export function immigrationCanEditApplication(
-  app: Pick<ApiApplication, "status">,
-  approvals: ApiApproval[] | null | undefined,
-): boolean {
-  const as = (app.status ?? "").trim().toLowerCase();
-  if (as !== "awaiting_immigration") return false;
-  if (isLatestImmigrationTerminal(approvals)) return false;
-  return true;
-}
-
-export function shouldAutoCreateImmigrationUnderReview(
-  app: Pick<ApiApplication, "status">,
-  approvals: ApiApproval[] | null | undefined,
-): boolean {
-  if (!immigrationCanEditApplication(app, approvals)) return false;
-  return !hasUnderReviewApprovalForBody(approvals, "IMMIGRATION");
 }
 
 const CHIP_BASE =
@@ -203,20 +198,19 @@ export function getBodyApprovalChipDisplay(
   };
 }
 
-export type GovernanceChipTriple = {
+export type GovernanceChipPair = {
   primary: { code: string; label: string };
   chips: Array<{ key: string; label: string; icon: string; chipClass: string }>;
 };
 
-/** Three chips: primary sport body + SRC + IMMIGRATION. */
-export function getGovernanceChipTriple(
+/** Two chips: primary sport body + SRC (immigration stage removed). */
+export function getGovernanceChipPair(
   approvals: ApiApproval[] | null | undefined,
   primary: { code: string; label: string },
-): GovernanceChipTriple {
+): GovernanceChipPair {
   const codes = [
     { code: primary.code, label: primary.label },
     { code: "SRC", label: "SRC" },
-    { code: "IMMIGRATION", label: "IMMIGRATION" },
   ];
   return {
     primary,
@@ -225,4 +219,12 @@ export function getGovernanceChipTriple(
       return { key: code, label: `${label}: ${chip.label}`, icon: chip.icon, chipClass: chip.chipClass };
     }),
   };
+}
+
+/** @deprecated Use {@link getGovernanceChipPair}. */
+export function getGovernanceChipTriple(
+  approvals: ApiApproval[] | null | undefined,
+  primary: { code: string; label: string },
+): GovernanceChipPair {
+  return getGovernanceChipPair(approvals, primary);
 }

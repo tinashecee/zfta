@@ -3,7 +3,14 @@ import { getCurrentUser, signOut } from "~/lib/auth";
 import { resolveSportBodyRowForReviewerUser, reviewerPortalAffiliationLabel } from "~/lib/users-api";
 import { listSportBodies, sportBodyApprovalCode } from "~/lib/sport-bodies-api";
 
-type ApproverNavItemKey = "dashboard" | "pendingQueue" | "approved" | "archived" | "systemLogs" | "account";
+type ApproverNavItemKey =
+  | "dashboard"
+  | "createApplication"
+  | "pendingQueue"
+  | "approved"
+  | "archived"
+  | "systemLogs"
+  | "account";
 
 type ApproverPortalNavProps = {
   activeItem: ApproverNavItemKey;
@@ -18,6 +25,7 @@ const NAV_ITEMS: Array<{
   filled?: boolean;
 }> = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard", href: "/approver/dashboard/" },
+  { key: "createApplication", label: "Create application", icon: "add_circle", href: "/approver/applications/new/", filled: true },
   { key: "pendingQueue", label: "Pending Queue", icon: "pending_actions", href: "/approver/dashboard/" },
   { key: "approved", label: "Approved", icon: "verified_user", href: "/approver/dashboard/?status=approved", filled: true },
   { key: "archived", label: "Archived", icon: "archive", href: "/approver/dashboard/?status=historical" },
@@ -29,6 +37,7 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
   const menuOpen = useSignal(false);
   const affiliationPrimary = useSignal<string | null>(null);
   const affiliationSecondary = useSignal<string | null>(null);
+  const showSportBodyCreate = useSignal(false);
 
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(async () => {
@@ -37,6 +46,20 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
     const sb = r.ok ? r.data : [];
     affiliationPrimary.value = reviewerPortalAffiliationLabel(u, sb);
     const row = resolveSportBodyRowForReviewerUser(u, sb);
+
+    // Sports-body reviewers may be represented via:
+    // - `approver_body: "SPORTS_BODY"` (new API),
+    // - legacy `body: "SPORT_BODY" | "SPORTS_BODY"`,
+    // - or a catalog-mapped sport-body row/code.
+    const approverKind = (u?.approver_body ?? "").trim().toUpperCase();
+    const legacyBody = (u?.body ?? "").trim().toUpperCase();
+    showSportBodyCreate.value =
+      u?.role === "reviewer" &&
+      (approverKind === "SPORTS_BODY" ||
+        legacyBody === "SPORT_BODY" ||
+        legacyBody === "SPORTS_BODY" ||
+        Boolean(row));
+
     if (row) {
       const code = sportBodyApprovalCode(row);
       const name = (row.name ?? "").trim();
@@ -163,7 +186,7 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
             </div>
 
             <div class="flex-1 space-y-2">
-              {NAV_ITEMS.map((item) => (
+              {NAV_ITEMS.filter((i) => i.key !== "createApplication" || showSportBodyCreate.value).map((item) => (
                 <a
                   key={item.key}
                   class={
@@ -186,14 +209,6 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
             </div>
 
             <div class="mt-auto pt-6 border-t border-emerald-900/30">
-              <button
-                class="w-full bg-secondary-container text-on-secondary-container py-3 rounded-md font-bold mb-6 hover:brightness-110 transition-all flex items-center justify-center gap-2"
-                type="button"
-              >
-                <span class="material-symbols-outlined">add</span>
-                New Authorization
-              </button>
-
               <div class="space-y-2">
                 <a
                   class="flex items-center gap-3 px-4 py-2 text-emerald-100/50 font-manrope uppercase tracking-widest text-[11px] hover:text-white transition-all"

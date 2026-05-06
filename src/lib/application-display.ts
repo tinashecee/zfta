@@ -3,16 +3,16 @@
  *
  * **Timeline** — Built in time order (submission, then approvals oldest→newest), then **reversed**
  * for display so the **latest** event is on top. Sort keys: `decided_at` when set, else
- * `updated_at` / `created_at` (stable tie-break: `id`). Title uses `body` (ZIFA, SRC, IMMIGRATION)
+ * `updated_at` / `created_at` (stable tie-break: `id`). Title uses `body` (sport body code, SRC, …)
  * and `status`; each approval card shows **decided_at** and **decision_note** explicitly. When
  * there are no approval rows, synthetic “processing / outcome”
  * lines may appear after submission; `priority_reason` is listed after approvals (or after those
  * synthetics when there are no rows).
  *
- * **Governance check** — For each of ZIFA, SRC, and IMMIGRATION we take the **latest** approval
- * whose `body` matches that stakeholder (substring match, case-insensitive). That row’s `status`
- * drives the pill. Bodies with no matching row show **pending**. If the approvals list is empty
- * (nothing loaded or no rows yet), all three bodies are **pending** and completion is 0%.
+ * **Governance check** — For the primary sport body and SRC we take the **latest** approval whose
+ * `body` matches that stakeholder (substring match, case-insensitive). That row’s `status`
+ * drives the pill. Bodies with no matching row show **pending**. If the approvals list is empty,
+ * both are **pending** and completion is 0%.
  */
 import type { ApiApproval } from "~/lib/approvals-api";
 
@@ -74,7 +74,7 @@ export function applicantFacingStatusLabel(status: string | undefined): string {
   }
   if (s === "awaiting_src" || s === "under_review") return "Awaiting SRC";
   if (s === "awaiting_information") return "Awaiting information";
-  if (s === "awaiting_immigration") return "Awaiting immigration";
+  if (s === "awaiting_immigration") return "Processing"; // legacy API status — immigration stage removed
   if (s === "information_requested") return "Information requested";
   return humanApplicationStatus(status);
 }
@@ -91,17 +91,12 @@ function ts(iso?: string | null): number {
   return Number.isNaN(t) ? 0 : t;
 }
 
-const GOV_SUB: Record<"ZIFA" | "SRC" | "IMMIGRATION", string> = {
-  ZIFA: "Football Admin",
-  SRC: "Sports Commission",
-  IMMIGRATION: "Border Control",
-};
+const SRC_GOVERNANCE_SUBTITLE = "Sports Commission";
 
-function matchBodyKey(body: string | null | undefined): "ZIFA" | "SRC" | "IMMIGRATION" | null {
+function matchBodyKey(body: string | null | undefined): "ZIFA" | "SRC" | null {
   const s = (body ?? "").toUpperCase();
   if (s.includes("ZIFA")) return "ZIFA";
   if (s.includes("SRC")) return "SRC";
-  if (s.includes("IMMIGRATION")) return "IMMIGRATION";
   return null;
 }
 
@@ -137,16 +132,28 @@ function governanceAllPending(primary: { code: string; label: string }): {
   const p = primary;
   const rows: GovernanceStake[] = [
     { name: p.label, subtitle: "Sport federation", state: "pending" },
-    { name: "SRC", subtitle: GOV_SUB.SRC, state: "pending" },
-    { name: "IMMIGRATION", subtitle: GOV_SUB.IMMIGRATION, state: "pending" },
+    { name: "SRC", subtitle: SRC_GOVERNANCE_SUBTITLE, state: "pending" },
   ];
   return { rows, completion: 0 };
 }
 
 function approvalMatchesBodyCode(a: ApiApproval, bodyCode: string): boolean {
   const want = bodyCode.trim().toUpperCase();
+  if (!want) return false;
+
+  // Newer APIs may store the specific sport-body routing code separately from the enum `body`.
+  const gotCode = ((a as unknown as { body_code?: string | null }).body_code ?? "").trim().toUpperCase();
+  if (gotCode) {
+    if (gotCode === want) return true;
+    if (gotCode.includes(want) || want.includes(gotCode)) return true;
+    return false;
+  }
+
   const got = (a.body ?? "").trim().toUpperCase();
-  if (!got || !want) return false;
+  if (!got) return false;
+  // If the API only stores the enum `SPORT_BODY` without a `body_code`,
+  // allow it to satisfy the primary sport-body stake.
+  if (got === "SPORT_BODY" && want !== "SRC") return true;
   if (got === want) return true;
   if (got.includes(want) || want.includes(got)) return true;
   return false;
@@ -154,7 +161,7 @@ function approvalMatchesBodyCode(a: ApiApproval, bodyCode: string): boolean {
 
 /**
  * Governance from approval rows; empty list ⇒ all bodies pending.
- * First column is the sport-specific body (`primary`), then SRC and Immigration.
+ * First column is the sport-specific body (`primary`), then SRC.
  */
 export function governanceFromApprovals(
   _applicationStatus: string | undefined,
@@ -166,10 +173,9 @@ export function governanceFromApprovals(
     return governanceAllPending(p);
   }
 
-  const triple: Array<{ code: string; label: string; subtitle: string }> = [
+  const pair: Array<{ code: string; label: string; subtitle: string }> = [
     { code: p.code, label: p.label, subtitle: "Sport federation" },
-    { code: "SRC", label: "SRC", subtitle: GOV_SUB.SRC },
-    { code: "IMMIGRATION", label: "IMMIGRATION", subtitle: GOV_SUB.IMMIGRATION },
+    { code: "SRC", label: "SRC", subtitle: SRC_GOVERNANCE_SUBTITLE },
   ];
 
   const sorted = [...approvals].sort(
@@ -177,14 +183,14 @@ export function governanceFromApprovals(
   );
   const latest = new Map<string, ApiApproval>();
   for (const a of sorted) {
-    for (const t of triple) {
+    for (const t of pair) {
       if (approvalMatchesBodyCode(a, t.code) && !latest.has(t.code)) {
         latest.set(t.code, a);
       }
     }
   }
 
-  const rows: GovernanceStake[] = triple.map((t) => {
+  const rows: GovernanceStake[] = pair.map((t) => {
     const ap = latest.get(t.code);
     return {
       name: t.label,
@@ -194,7 +200,7 @@ export function governanceFromApprovals(
   });
 
   const approvedCount = rows.filter((r) => r.state === "approved").length;
-  const completion = Math.min(100, Math.round((approvedCount / 3) * 100));
+  const completion = Math.min(100, Math.round((approvedCount / 2) * 100));
   return { rows, completion };
 }
 
@@ -338,7 +344,8 @@ export function buildMergedApplicationTimeline(
       st !== "awaiting_sport_body" &&
       st !== "submitted" &&
       st !== "awaiting_src" &&
-      st !== "under_review"
+      st !== "under_review" &&
+      st !== "awaiting_immigration"
     ) {
       items.push({
         when: "Recent",
@@ -361,12 +368,16 @@ export function buildMergedApplicationTimeline(
         body: "Your dossier is queued for the relevant national sport body." + submittedTimestampNote,
         variant: "success",
       });
-    } else if (st === "awaiting_src" || st === "under_review") {
+    } else if (st === "awaiting_src" || st === "under_review" || st === "awaiting_immigration") {
       items.push({
         when: "Recent",
         eyebrow: "Processing",
-        title: "Awaiting SRC",
-        body: "Sport body review is complete; your dossier is with SRC." + submittedTimestampNote,
+        title: st === "awaiting_immigration" ? "In review" : "Awaiting SRC",
+        body:
+          st === "awaiting_immigration"
+            ? "This file is in a legacy processing state on the server; the workflow no longer includes a separate immigration stage." +
+              submittedTimestampNote
+            : "Sport body review is complete; your dossier is with SRC." + submittedTimestampNote,
         variant: "success",
       });
     }

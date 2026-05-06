@@ -22,6 +22,7 @@ const ORG_TYPE_VALUES = [
   "primary_school",
   "college_university",
   "company",
+  "sport_body",
 ] as const;
 
 const ORG_TYPE_OPTIONS = [
@@ -32,6 +33,7 @@ const ORG_TYPE_OPTIONS = [
   { value: "primary_school" as const, label: "Primary School" },
   { value: "college_university" as const, label: "College / University" },
   { value: "company" as const, label: "Company" },
+  { value: "sport_body" as const, label: "Sports body" },
 ] as const;
 
 /** Older API responses (`football_club`, …) map to the new `org_type` strings. */

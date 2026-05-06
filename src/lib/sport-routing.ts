@@ -2,7 +2,7 @@ import type { ApiSportBody } from "~/lib/sport-bodies-api";
 import { sportBodyApprovalCode } from "~/lib/sport-bodies-api";
 import type { ApiZimbabweSport } from "~/lib/zimbabwe-sports-api";
 
-/** First-stage application statuses (sport-specific body, then SRC, then immigration). */
+/** First-stage application statuses (sport-specific body, then SRC). */
 export const PRIMARY_STAGE_STATUSES = new Set([
   "awaiting_body",
   "awaiting_zifa",

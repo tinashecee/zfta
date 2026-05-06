@@ -24,7 +24,7 @@ export const ApplicationDocumentLink = component$((props: {
           </p>
           {!pathOk ? (
             <p class="text-xs text-on-surface-variant" role="status">
-              This file reference can’t be opened (expected <code class="text-[10px]">upload_zfta_docs/…</code>).
+              This file reference can’t be opened (expected <code class="text-[10px]">uploads/…</code>).
             </p>
           ) : null}
           <div class="flex flex-wrap items-center gap-2">

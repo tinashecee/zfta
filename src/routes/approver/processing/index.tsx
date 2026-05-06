@@ -2,20 +2,19 @@ import { component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
 import { useLocation } from "@builder.io/qwik-city";
 import { ApproverPortalNav } from "~/components/approver-portal-nav";
+import { AttachmentField } from "~/components/application-form/attachment-field";
 import { ApplicationDocumentLink } from "~/components/application-document-link";
 import { TravelPersonnelRoster } from "~/components/travel-personnel-roster";
 import type { ApiApplication } from "~/lib/applications-api";
-import { getApplication, patchApplication } from "~/lib/applications-api";
+import { getApplication, patchApplication, uploadOutgoingTourComplianceDeclaration } from "~/lib/applications-api";
 import type { ApiApproval } from "~/lib/approvals-api";
 import { listApprovals, createApproval } from "~/lib/approvals-api";
 import {
-  getGovernanceChipTriple,
+  getGovernanceChipPair,
   hasUnderReviewApprovalForBody,
-  immigrationCanEditApplication,
-  isLatestImmigrationTerminal,
+  hasAnySportBodyApproved,
   isLatestPrimaryBodyApproved,
   isLatestSrcTerminal,
-  shouldAutoCreateImmigrationUnderReview,
   shouldAutoCreateSrcUnderReview,
   srcCanEditApplication,
 } from "~/lib/approver-approval-helpers";
@@ -30,12 +29,12 @@ import {
 import { listSportBodies } from "~/lib/sport-bodies-api";
 import { listZimbabweSports } from "~/lib/zimbabwe-sports-api";
 import { formatIsoDate, formatDateTime, labelEventType } from "~/lib/application-display";
+import { createCertificate } from "~/lib/certificates-api";
 import { getOrganisation, organisationDisplayName } from "~/lib/organisations-api";
 import { apiPersonnelToRow, type TravelPersonnelRow } from "~/lib/travel-personnel-types";
 
 type DecisionAction = "approved" | "rejected" | "information_requested";
-type SrcDecisionAction = "awaiting_information" | "awaiting_immigration" | "rejected";
-type ImmigrationDecisionAction = "approved" | "rejected" | "information_requested";
+type SrcDecisionAction = "awaiting_information" | "approved" | "rejected";
 type ReviewerBody = string | null;
 
 function str(v: string | null | undefined | number | boolean): string {
@@ -75,7 +74,7 @@ function primaryReadOnlyExplanation(
   if (s === "approved") {
     return {
       title: "Approved",
-      body: "This application has completed approval. No further first-line body changes apply.",
+      body: "This application is fully approved or is with SRC. No further first-line body changes apply.",
     };
   }
   return {
@@ -98,25 +97,14 @@ function successMessageForSrcDecision(action: SrcDecisionAction): string {
   if (action === "awaiting_information") {
     return "Decision saved: information requested — recorded on the approval dossier.";
   }
-  if (action === "awaiting_immigration") {
-    return "Decision saved: file is now awaiting immigration review.";
-  }
-  return "Decision saved: rejected.";
-}
-
-function successMessageForImmigrationDecision(action: ImmigrationDecisionAction): string {
   if (action === "approved") {
     return "Decision saved: approved. The application is now fully approved.";
-  }
-  if (action === "information_requested") {
-    return "Decision saved: request for correction — recorded on the approval dossier only.";
   }
   return "Decision saved: rejected.";
 }
 
 function processingPortalTitle(body: ReviewerBody, primaryLabel: string): string {
   if (body === "SRC") return "Official Approver Portal - SRC Queue";
-  if (body === "IMMIGRATION") return "Official Approver Portal - Immigration Queue";
   return `Official Approver Portal - ${primaryLabel} Queue`;
 }
 
@@ -133,7 +121,7 @@ function srcReadOnlyExplanation(
       body: "SRC actions are available when the application status is awaiting SRC.",
     };
   }
-  if (!isLatestPrimaryBodyApproved(approvals, primaryBodyCode)) {
+  if (!hasAnySportBodyApproved(approvals)) {
     return {
       title: `Awaiting ${primaryLabel}`,
       body: `Open this file once ${primaryLabel} has recorded an approval on the application.`,
@@ -148,29 +136,6 @@ function srcReadOnlyExplanation(
   return {
     title: "Read-only",
     body: "This application cannot be edited from the SRC reviewer screen.",
-  };
-}
-
-function immigrationReadOnlyExplanation(
-  app: ApiApplication,
-  approvals: ApiApproval[],
-): { title: string; body: string } {
-  const st = (app.status ?? "").trim().toLowerCase();
-  if (st !== "awaiting_immigration") {
-    return {
-      title: "Not in immigration queue",
-      body: "Immigration actions are available when the application status is awaiting immigration review.",
-    };
-  }
-  if (isLatestImmigrationTerminal(approvals)) {
-    return {
-      title: "Immigration decision recorded",
-      body: "A final immigration decision is on file — you cannot submit further immigration decisions here.",
-    };
-  }
-  return {
-    title: "Read-only",
-    body: "This application cannot be edited from the immigration reviewer screen.",
   };
 }
 
@@ -202,8 +167,8 @@ export default component$(() => {
 
   const actionSelected = useSignal<DecisionAction | null>(null);
   const srcActionSelected = useSignal<SrcDecisionAction | null>(null);
-  const immigrationActionSelected = useSignal<ImmigrationDecisionAction | null>(null);
   const decisionNote = useSignal("");
+  const statutoryComplianceDeclarationFile = useSignal<File | null>(null);
   const submitting = useSignal(false);
   const submitError = useSignal<string | null>(null);
   const successToast = useSignal<string | null>(null);
@@ -285,9 +250,12 @@ export default component$(() => {
       primaryStageCanEditApplication(appR.data) &&
       !hasUnderReviewApprovalForBody(approvalRows, primaryCode)
     ) {
+      const u = getCurrentUser();
       await createApproval({
         application_id: id,
-        body: primaryCode,
+        body: "SPORT_BODY",
+        body_code: primaryCode,
+        sports_body: u?.sports_body ?? (u?.sport_body_id != null ? String(u.sport_body_id) : null),
         status: "under_review",
       });
       const refetch = await listApprovals({ application_id: id, limit: 50, offset: 0 });
@@ -298,20 +266,6 @@ export default component$(() => {
       await createApproval({
         application_id: id,
         body: "SRC",
-        status: "under_review",
-      });
-      const refetch = await listApprovals({ application_id: id, limit: 50, offset: 0 });
-      if (refetch.ok) approvalRows = refetch.data;
-    }
-
-    if (
-      apprR.ok &&
-      reviewerBody.value === "IMMIGRATION" &&
-      shouldAutoCreateImmigrationUnderReview(appR.data, approvalRows)
-    ) {
-      await createApproval({
-        application_id: id,
-        body: "IMMIGRATION",
         status: "under_review",
       });
       const refetch = await listApprovals({ application_id: id, limit: 50, offset: 0 });
@@ -429,7 +383,7 @@ export default component$(() => {
 
                   <div class="w-full md:w-auto md:text-right">
                     <div class="mb-4 flex flex-wrap gap-2 md:justify-end">
-                      {getGovernanceChipTriple(approvals.value, {
+                      {getGovernanceChipPair(approvals.value, {
                         code: primaryBodyCode.value,
                         label: primaryBodyLabel.value,
                       }).chips.map((chip) => (
@@ -628,8 +582,17 @@ export default component$(() => {
                       Verification Documents
                     </h2>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <ApplicationDocumentLink kind="Support document (invitation)" storedPath={app.support_documents} />
-                      <ApplicationDocumentLink kind="Travel / identity documents" storedPath={app.travel_documents} />
+                      <ApplicationDocumentLink kind="2.1 Compliance declaration" storedPath={app.compliance_declaration_doc} />
+                      <ApplicationDocumentLink kind="2.3 Invitation letter" storedPath={app.invitation_letter_doc} />
+                      <ApplicationDocumentLink
+                        kind="2.4 National association clearance"
+                        storedPath={app.national_assoc_clearance_doc}
+                      />
+                      <ApplicationDocumentLink kind="2.9 Proof of funding" storedPath={app.funding_proof_doc} />
+                      <ApplicationDocumentLink
+                        kind="2.7 Liabilities & expenditure"
+                        storedPath={app.liabilities_breakdown_doc}
+                      />
                     </div>
                   </section>
                 </div>
@@ -663,19 +626,19 @@ export default component$(() => {
                                 <button
                                   class={[
                                     "group flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
-                                    srcActionSelected.value === "awaiting_immigration"
+                                    srcActionSelected.value === "approved"
                                       ? "border-primary-fixed-dim bg-primary-fixed/20"
                                       : "border-white/20 hover:bg-white/10",
                                   ].join(" ")}
                                   type="button"
                                   onClick$={() => {
-                                    srcActionSelected.value = "awaiting_immigration";
+                                    srcActionSelected.value = "approved";
                                   }}
                                 >
                                   <div
                                     class={[
                                       "w-5 h-5 rounded-full border-2 shrink-0 mt-0.5 transition-colors",
-                                      srcActionSelected.value === "awaiting_immigration"
+                                      srcActionSelected.value === "approved"
                                         ? "border-primary-fixed-dim bg-primary-fixed-dim"
                                         : "border-primary-fixed-dim",
                                     ].join(" ")}
@@ -774,7 +737,7 @@ export default component$(() => {
                               const approvalStatus =
                                 action === "awaiting_information"
                                   ? "information_requested"
-                                  : action === "awaiting_immigration"
+                                  : action === "approved"
                                     ? "approved"
                                     : "rejected";
 
@@ -797,10 +760,38 @@ export default component$(() => {
                               // information_requested is recorded on approvals only.
                               if (approvalStatus === "approved" || approvalStatus === "rejected") {
                                 const patchStatus =
-                                  approvalStatus === "approved" ? "awaiting_immigration" : "rejected";
+                                  approvalStatus === "approved" ? "approved" : "rejected";
                                 const patchR = await patchApplication(id, { status: patchStatus });
                                 if (!patchR.ok) {
                                   submitError.value = patchR.error;
+                                  submitting.value = false;
+                                  return;
+                                }
+                              }
+
+                              // When SRC approves, generate the travel certificate (legacy immigration stage removed).
+                              if (approvalStatus === "approved") {
+                                const org = organisationName.value.trim();
+                                if (!org || org === "—") {
+                                  submitError.value =
+                                    "SRC approval saved, but certificate could not be generated (missing organisation name).";
+                                  submitting.value = false;
+                                  return;
+                                }
+                                const uid = user?.id?.trim() ?? "";
+                                if (!uid) {
+                                  submitError.value =
+                                    "SRC approval saved, but certificate could not be generated (missing reviewer user id).";
+                                  submitting.value = false;
+                                  return;
+                                }
+                                const certR = await createCertificate({
+                                  application_id: id,
+                                  org_name: org,
+                                  user_id: uid,
+                                });
+                                if (!certR.ok) {
+                                  submitError.value = `SRC approval saved, but certificate could not be generated: ${certR.error}`;
                                   submitting.value = false;
                                   return;
                                 }
@@ -827,178 +818,6 @@ export default component$(() => {
                           </div>
                         ) : null}
                       </>
-                    ) : reviewerBody.value === "IMMIGRATION" ? (
-                      <>
-                        {app && !immigrationCanEditApplication(app, approvals.value) ? (
-                          <div class="rounded-xl border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
-                            <p class="text-[10px] font-bold uppercase tracking-widest text-secondary mb-2">
-                              {immigrationReadOnlyExplanation(app, approvals.value).title}
-                            </p>
-                            <p class="text-white/85">{immigrationReadOnlyExplanation(app, approvals.value).body}</p>
-                          </div>
-                        ) : (
-                          <div class="space-y-4 mb-8">
-                            <div class="grid grid-cols-1 gap-3">
-                              <button
-                                class={[
-                                  "group flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
-                                  immigrationActionSelected.value === "approved"
-                                    ? "border-primary-fixed-dim bg-primary-fixed/20"
-                                    : "border-white/20 hover:bg-white/10",
-                                ].join(" ")}
-                                type="button"
-                                onClick$={() => {
-                                  immigrationActionSelected.value = "approved";
-                                }}
-                              >
-                                <div
-                                  class={[
-                                    "w-5 h-5 rounded-full border-2 shrink-0 mt-0.5 transition-colors",
-                                    immigrationActionSelected.value === "approved"
-                                      ? "border-primary-fixed-dim bg-primary-fixed-dim"
-                                      : "border-primary-fixed-dim",
-                                  ].join(" ")}
-                                />
-                                <span class="text-sm font-bold">Approve</span>
-                              </button>
-
-                              <button
-                                class={[
-                                  "group flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
-                                  immigrationActionSelected.value === "information_requested"
-                                    ? "border-secondary bg-secondary/20"
-                                    : "border-white/20 hover:bg-white/10",
-                                ].join(" ")}
-                                type="button"
-                                onClick$={() => {
-                                  immigrationActionSelected.value = "information_requested";
-                                }}
-                              >
-                                <div
-                                  class={[
-                                    "w-5 h-5 rounded-full border-2 shrink-0 mt-0.5 transition-colors",
-                                    immigrationActionSelected.value === "information_requested"
-                                      ? "border-secondary bg-secondary"
-                                      : "border-secondary",
-                                  ].join(" ")}
-                                />
-                                <span class="text-sm font-bold">Request correction</span>
-                              </button>
-
-                              <button
-                                class={[
-                                  "group flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
-                                  immigrationActionSelected.value === "rejected"
-                                    ? "border-error bg-error/20"
-                                    : "border-white/20 hover:bg-error/30",
-                                ].join(" ")}
-                                type="button"
-                                onClick$={() => {
-                                  immigrationActionSelected.value = "rejected";
-                                }}
-                              >
-                                <div
-                                  class={[
-                                    "w-5 h-5 rounded-full border-2 shrink-0 mt-0.5 transition-colors",
-                                    immigrationActionSelected.value === "rejected"
-                                      ? "border-error bg-error"
-                                      : "border-error",
-                                  ].join(" ")}
-                                />
-                                <span class="text-sm font-bold text-on-tertiary-container">Reject</span>
-                              </button>
-                            </div>
-
-                            <label class="block mt-6">
-                              <span class="text-[10px] font-bold tracking-widest text-secondary/80">
-                                COMMENTARY — APPROVE · REJECT · REQUEST CORRECTION
-                              </span>
-                              <textarea
-                                class="mt-2 w-full bg-white/5 border border-white/10 rounded-xl text-sm p-4 focus:ring-secondary focus:border-secondary placeholder-white/20"
-                                placeholder="Optional: reasons for Approve, Reject, or Request correction…"
-                                rows={4}
-                                value={decisionNote.value}
-                                onInput$={(_, el) => {
-                                  decisionNote.value = el.value;
-                                }}
-                              />
-                            </label>
-                          </div>
-                        )}
-
-                        {submitError.value ? (
-                          <p class="mb-4 text-xs text-error bg-error/10 rounded-lg px-3 py-2" role="alert">
-                            {submitError.value}
-                          </p>
-                        ) : null}
-
-                        {app && immigrationCanEditApplication(app, approvals.value) ? (
-                          <button
-                            class="w-full bg-secondary-container text-on-secondary-container py-4 rounded-xl font-extrabold tracking-tight hover:shadow-[0_0_20px_rgba(253,208,0,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                            type="button"
-                            disabled={immigrationActionSelected.value === null || submitting.value}
-                            onClick$={async () => {
-                              if (
-                                !immigrationActionSelected.value ||
-                                !app ||
-                                !immigrationCanEditApplication(app, approvals.value)
-                              )
-                                return;
-                              const user = getCurrentUser();
-                              submitting.value = true;
-                              submitError.value = null;
-
-                              const action = immigrationActionSelected.value;
-                              const approvalStatus =
-                                action === "information_requested" ? "awaiting_information" : action;
-                              const approvalR = await createApproval({
-                                application_id: id,
-                                body: "IMMIGRATION",
-                                status: approvalStatus,
-                                decided_at: new Date().toISOString(),
-                                decided_by: user?.id ?? null,
-                                decision_note: decisionNote.value.trim() || null,
-                              });
-
-                              if (!approvalR.ok) {
-                                submitError.value = approvalR.error;
-                                submitting.value = false;
-                                return;
-                              }
-
-                              // Request correction: approvals only (same pattern as SRC / ZIFA information request).
-                              if (action === "approved" || action === "rejected") {
-                                const patchR = await patchApplication(id, {
-                                  status: action === "approved" ? "approved" : "rejected",
-                                });
-                                if (!patchR.ok) {
-                                  submitError.value = patchR.error;
-                                  submitting.value = false;
-                                  return;
-                                }
-                              }
-
-                              successToast.value = successMessageForImmigrationDecision(action);
-                              window.setTimeout(() => {
-                                window.location.assign("/approver/dashboard/");
-                              }, 2200);
-                            }}
-                          >
-                            {successToast.value
-                              ? "Saved"
-                              : submitting.value
-                                ? "Submitting…"
-                                : "SUBMIT OFFICIAL DECISION"}
-                          </button>
-                        ) : null}
-
-                        {app && immigrationCanEditApplication(app, approvals.value) ? (
-                          <div class="mt-6 flex items-center gap-2 text-[10px] text-white/40 justify-center">
-                            <span class="material-symbols-outlined text-xs">info</span>
-                            This action will be logged under your immigration reviewer account
-                          </div>
-                        ) : null}
-                      </>
                     ) : (
                       <>
                         {app &&
@@ -1020,6 +839,23 @@ export default component$(() => {
                           </div>
                         ) : (
                           <div class="space-y-4 mb-8">
+                            <div class="rounded-xl border border-secondary/30 bg-white/5 p-4 space-y-3">
+                              <p class="text-[10px] font-bold uppercase tracking-widest text-secondary">
+                                Mandatory document for approval
+                              </p>
+                              <p class="text-xs text-white/70 leading-relaxed">
+                                Attach the Declaration of full compliance with statutory requirements before you approve.
+                                Dedicated API upload slots are not wired yet — this file is validated here only.
+                              </p>
+                              <div class="grid gap-4 [&_.bg-surface-container-highest]:bg-white/10 [&_.text-on-surface]:text-white">
+                                <AttachmentField
+                                  title="Declaration of full compliance with statutory requirements"
+                                  apiFieldHint="pending API: statutory_compliance_declaration"
+                                  file={statutoryComplianceDeclarationFile}
+                                />
+                              </div>
+                            </div>
+
                             <label class="block">
                               <span class="text-[10px] font-bold tracking-widest text-secondary/80">REVIEWER ACTION</span>
                               <div class="grid grid-cols-1 gap-3 mt-2">
@@ -1123,7 +959,11 @@ export default component$(() => {
                           <button
                             class="w-full bg-secondary-container text-on-secondary-container py-4 rounded-xl font-extrabold tracking-tight hover:shadow-[0_0_20px_rgba(253,208,0,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                             type="button"
-                            disabled={actionSelected.value === null || submitting.value}
+                            disabled={
+                              actionSelected.value === null ||
+                              submitting.value ||
+                              (actionSelected.value === "approved" && !statutoryComplianceDeclarationFile.value)
+                            }
                             onClick$={async () => {
                               if (
                                 !actionSelected.value ||
@@ -1136,9 +976,48 @@ export default component$(() => {
                               submitting.value = true;
                               submitError.value = null;
 
+                              // Mandatory doc upload before sports-body approval is recorded.
+                              if (actionSelected.value === "approved") {
+                                const file = statutoryComplianceDeclarationFile.value;
+                                if (!file) {
+                                  submitError.value =
+                                    "Attach the Declaration of full compliance with statutory requirements before approving.";
+                                  submitting.value = false;
+                                  return;
+                                }
+                                const up = await uploadOutgoingTourComplianceDeclaration({
+                                  compliance_declaration: file,
+                                });
+                                if (!up.ok) {
+                                  submitError.value = up.error;
+                                  submitting.value = false;
+                                  return;
+                                }
+                                const storedPath = String(up.data?.compliance_declaration_doc ?? "").trim();
+                                if (!storedPath) {
+                                  submitError.value =
+                                    "Compliance declaration uploaded, but server did not return a document path.";
+                                  submitting.value = false;
+                                  return;
+                                }
+                                // Persist the compliance doc path on the application, and advance the file to SRC.
+                                const patchR = await patchApplication(id, {
+                                  statutory_compliance_declaration_doc: storedPath,
+                                  status: "awaiting_src",
+                                });
+                                if (!patchR.ok) {
+                                  submitError.value = patchR.error;
+                                  submitting.value = false;
+                                  return;
+                                }
+                              }
+
                               const approvalR = await createApproval({
                                 application_id: id,
-                                body: primaryBodyCode.value,
+                                body: "SPORT_BODY",
+                                body_code: primaryBodyCode.value,
+                                sports_body:
+                                  user?.sports_body ?? (user?.sport_body_id != null ? String(user.sport_body_id) : null),
                                 status: actionSelected.value,
                                 decided_at: new Date().toISOString(),
                                 decided_by: user?.id ?? null,
@@ -1152,12 +1031,7 @@ export default component$(() => {
                               }
 
                               if (actionSelected.value === "approved") {
-                                const patchR = await patchApplication(id, { status: "awaiting_src" });
-                                if (!patchR.ok) {
-                                  submitError.value = patchR.error;
-                                  submitting.value = false;
-                                  return;
-                                }
+                                // Status was already advanced when we persisted the compliance doc.
                               } else if (actionSelected.value === "rejected") {
                                 const patchR = await patchApplication(id, { status: "rejected" });
                                 if (!patchR.ok) {

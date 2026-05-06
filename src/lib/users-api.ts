@@ -10,11 +10,11 @@ export const USER_ROLES = ["applicant", "reviewer", "supervisor", "system_admin"
 export type UserRole = (typeof USER_ROLES)[number];
 
 /** API enum for reviewer routing — send `sports_body` (sport-body row id as string) when `approver_body` is `SPORTS_BODY`. */
-export const APPROVER_BODY_KINDS = ["SPORTS_BODY", "SRC", "IMMIGRATION"] as const;
+export const APPROVER_BODY_KINDS = ["SPORTS_BODY", "SRC"] as const;
 export type ApproverBodyKind = (typeof APPROVER_BODY_KINDS)[number];
 
 /** @deprecated Legacy flat codes; prefer {@link ApproverBodyKind}. */
-export const APPROVER_BODIES = ["ZIFA", "SRC", "IMMIGRATION"] as const;
+export const APPROVER_BODIES = ["ZIFA", "SRC"] as const;
 export type ApproverBody = (typeof APPROVER_BODIES)[number];
 
 /** @deprecated */
@@ -24,7 +24,7 @@ export function displayApproverBodyKind(kind: string | null | undefined): string
   const k = (kind ?? "").trim().toUpperCase();
   if (k === "SPORTS_BODY") return "Sports body";
   if (k === "SRC") return "SRC";
-  if (k === "IMMIGRATION") return "IMMIGRATION";
+  if (k === "IMMIGRATION") return "Legacy (no longer supported)";
   return (kind ?? "").trim() || "—";
 }
 
@@ -57,7 +57,8 @@ export function resolveSportBodyRowForReviewerUser(
 ): ApiSportBody | undefined {
   if (!user || sportBodies.length === 0) return undefined;
   const ab = (user.approver_body ?? "").trim().toUpperCase();
-  if (ab === "SRC" || ab === "IMMIGRATION") return undefined;
+  if (ab === "IMMIGRATION") return undefined;
+  if (ab === "SRC") return undefined;
   if (!ab) {
     const loose = coerceSportsBodyToString(user.sports_body);
     if (loose) {
@@ -84,7 +85,8 @@ export function resolveSportBodyRowForReviewerUser(
   const legacy = (user.body ?? "").trim();
   if (!legacy) return undefined;
   const uLegacy = legacy.toUpperCase();
-  if (uLegacy === "SRC" || uLegacy === "IMMIGRATION") return undefined;
+  if (uLegacy === "SRC") return undefined;
+  if (uLegacy === "IMMIGRATION") return undefined;
   if (uLegacy === "SPORT_BODY" || uLegacy === "SPORTS_BODY") return undefined;
   return sportBodies.find((x) => sportBodyApprovalCode(x).toUpperCase() === uLegacy);
 }
@@ -111,11 +113,11 @@ export function inferApproverFormFromUser(
     return { kind: "SPORTS_BODY", sportsBodyCode: "" };
   }
   if (ab === "SRC") return { kind: "SRC", sportsBodyCode: "" };
-  if (ab === "IMMIGRATION") return { kind: "IMMIGRATION", sportsBodyCode: "" };
+  if (ab === "IMMIGRATION") return { kind: "", sportsBodyCode: "" };
 
   const legacy = (u.body ?? "").trim().toUpperCase();
   if (legacy === "SRC") return { kind: "SRC", sportsBodyCode: "" };
-  if (legacy === "IMMIGRATION") return { kind: "IMMIGRATION", sportsBodyCode: "" };
+  if (legacy === "IMMIGRATION") return { kind: "", sportsBodyCode: "" };
   if (u.sport_body_id != null && u.sport_body_id > 0) {
     const sid = Number(u.sport_body_id);
     const row = sportBodies.find((x) => Number(x.id) === sid);
@@ -133,7 +135,7 @@ export function inferApproverFormFromUser(
 }
 
 /**
- * Resolves the reviewer “routing” token used by approver UI (SRC, IMMIGRATION, or sport-body approval code).
+ * Resolves the reviewer “routing” token used by approver UI (SRC or sport-body approval code).
  * Requires `sportBodies` when the user is a sports-body approver (`SPORTS_BODY` or legacy `sport_body_id` only).
  */
 export function reviewerRoutingBodyFromSession(
@@ -142,10 +144,12 @@ export function reviewerRoutingBodyFromSession(
 ): string | null {
   if (!user) return null;
   const ab = (user.approver_body ?? "").trim().toUpperCase();
-  if (ab === "SRC" || ab === "IMMIGRATION") return ab;
+  if (ab === "SRC") return ab;
+  if (ab === "IMMIGRATION") return null;
 
   const legacyHi = (user.body ?? "").trim().toUpperCase();
-  if (legacyHi === "SRC" || legacyHi === "IMMIGRATION") return legacyHi;
+  if (legacyHi === "SRC") return legacyHi;
+  if (legacyHi === "IMMIGRATION") return null;
 
   const row = resolveSportBodyRowForReviewerUser(user, sportBodies);
   if (row) return sportBodyApprovalCode(row);
@@ -164,7 +168,7 @@ export function reviewerRoutingBodyFromSession(
 }
 
 /**
- * Short label for approver chrome: sport-body **name** when the user maps to a catalog row; otherwise routing token (SRC, IMMIGRATION, code).
+ * Short label for approver chrome: sport-body **name** when the user maps to a catalog row; otherwise routing token (SRC, code).
  */
 export function reviewerPortalAffiliationLabel(
   user: Pick<AuthUser, "body" | "approver_body" | "sport_body_id" | "sports_body"> | null | undefined,
@@ -172,7 +176,7 @@ export function reviewerPortalAffiliationLabel(
 ): string | null {
   if (!user) return null;
   const ab = (user.approver_body ?? "").trim().toUpperCase();
-  if (ab === "SRC" || ab === "IMMIGRATION") {
+  if (ab === "SRC") {
     return reviewerRoutingBodyFromSession(user, sportBodies);
   }
   const row = resolveSportBodyRowForReviewerUser(user, sportBodies);
@@ -187,7 +191,7 @@ export function reviewerPortalAffiliationLabel(
 /** Table / detail line for reviewer assignment. */
 export function formatUserApproverSummary(u: ApiUser, sportBodies?: ApiSportBody[]): string {
   const ab = (u.approver_body ?? "").trim().toUpperCase();
-  if (ab === "SRC" || ab === "IMMIGRATION") return displayApproverBodyKind(ab);
+  if (ab === "SRC") return displayApproverBodyKind(ab);
 
   const row =
     sportBodies && sportBodies.length > 0
@@ -320,7 +324,7 @@ export type ApiUser = {
   mobile_number?: string | null;
   /** Legacy flat reviewer code; may still be set for older rows. */
   body?: string | null;
-  /** Reviewer kind: SPORTS_BODY, SRC, IMMIGRATION */
+  /** Reviewer kind: SPORTS_BODY, SRC */
   approver_body?: string | null;
   /** Sport-body row id as string (varchar) when `approver_body` is SPORTS_BODY */
   sports_body?: string | null;

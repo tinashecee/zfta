@@ -321,7 +321,7 @@ export default component$(() => {
                     </div>
                     <div class="bg-surface-container-high/50 p-3 rounded-lg text-sm text-on-surface">
                       {isRejected
-                        ? "Application was rejected after final immigration validation flagged an unresolved documentation conflict."
+                        ? "Application was rejected after final governance review flagged an unresolved documentation conflict."
                         : "Application was approved after all required supporting documents and external checks were completed."}
                     </div>
                   </div>
@@ -361,7 +361,7 @@ export default component$(() => {
                     <span class="text-[10px] font-bold tracking-widest text-secondary/80">OFFICIAL SUMMARY</span>
                     <div class="mt-2 rounded-xl bg-white/5 border border-white/10 p-4 text-sm leading-relaxed text-white/80">
                       {isRejected
-                        ? "Travel authorization was declined pending resolution of the immigration discrepancy attached to the delegation dossier."
+                        ? "Travel authorization was declined pending resolution of a documentation discrepancy attached to the delegation dossier."
                         : "Travel authorization was cleared after all regulatory checks returned satisfactory results and payment confirmation was validated."}
                     </div>
                   </div>

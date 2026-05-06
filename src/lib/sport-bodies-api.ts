@@ -108,15 +108,13 @@ export function sportBodyUserPayloadId(b: ApiSportBody): string {
 
 /** Fixed national bodies listed before/after sport-body codes from `GET /api/v1/sport-bodies`. */
 export const APPROVER_BODY_FIXED_FIRST = ["ZIFA", "SRC"] as const;
-export const APPROVER_BODY_FIXED_LAST = ["IMMIGRATION"] as const;
 
 const RESERVED_APPROVER_BODY_CODES = new Set<string>(
-  [...APPROVER_BODY_FIXED_FIRST, ...APPROVER_BODY_FIXED_LAST].map((s) => s.toUpperCase()),
+  [...APPROVER_BODY_FIXED_FIRST].map((s) => s.toUpperCase()),
 );
 
 /**
- * Values for reviewer `body` `<select>`: ZIFA, SRC, sorted unique API codes (excluding those
- * reserved slots), then IMMIGRATION.
+ * Values for reviewer `body` `<select>`: ZIFA, SRC, then sorted unique API codes (excluding reserved slots).
  */
 export function approverBodySelectValuesFromSportBodies(rows: ApiSportBody[]): string[] {
   const fromApi = rows.map((b) => sportBodyApprovalCode(b));
@@ -124,10 +122,10 @@ export function approverBodySelectValuesFromSportBodies(rows: ApiSportBody[]): s
     (c) => !RESERVED_APPROVER_BODY_CODES.has(c),
   );
   unique.sort((a, b) => a.localeCompare(b));
-  return [...APPROVER_BODY_FIXED_FIRST, ...unique, ...APPROVER_BODY_FIXED_LAST];
+  return [...APPROVER_BODY_FIXED_FIRST, ...unique];
 }
 
-/** Rows for labelled options — omits bodies whose code duplicates ZIFA / SRC / IMMIGRATION. */
+/** Rows for labelled options — omits bodies whose code duplicates ZIFA / SRC. */
 export function sportBodiesForApproverSelect(rows: ApiSportBody[]): ApiSportBody[] {
   return rows.filter((b) => !RESERVED_APPROVER_BODY_CODES.has(sportBodyApprovalCode(b)));
 }

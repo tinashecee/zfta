@@ -2,6 +2,21 @@
  * Client-side checks before POST /api/v1/applications (matches server required fields).
  */
 export function validateNewApplicationFormData(fd: FormData): string | null {
+  // Outgoing tours have a stricter/minimal create body now; validate only what the server requires.
+  const applicationType = String(fd.get("application_type") ?? "").trim();
+  if (applicationType === "outgoing_tour") {
+    const host_country = String(fd.get("host_country") ?? "").trim();
+    if (!host_country) return "Host country is required.";
+    const departure_date = String(fd.get("departure_date") ?? "").trim();
+    if (!departure_date) return "Departure date is required.";
+    const return_date = String(fd.get("return_date") ?? "").trim();
+    if (!return_date) return "Return date is required.";
+    if (return_date < departure_date) return "Return date must be on or after the departure date.";
+    const desc = String(fd.get("event_description") ?? "").trim();
+    if (!desc) return "Purpose / benefits (2.8) is required.";
+    return null;
+  }
+
   const event_type = String(fd.get("event_type") ?? "").trim();
   if (!event_type) {
     return "Select event type: tournament or friendly match.";

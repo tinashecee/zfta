@@ -159,7 +159,7 @@ export const ApplicantPortalNav = component$<ApplicantPortalNavProps>(({ activeI
               <button
                 class="w-full bg-[#fdd000] text-[#6e5900] py-4 px-4 rounded-xl font-black flex items-center justify-center gap-2 shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all"
                 type="button"
-                onClick$={() => window.location.assign("/applicant/")}
+                onClick$={() => window.location.assign("/applicant/new/")}
               >
                 <span class="material-symbols-outlined">add_circle</span>
                 New Application

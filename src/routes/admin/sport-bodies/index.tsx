@@ -1,6 +1,7 @@
 import { $, component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
 import { AdminPortalNav } from "~/components/admin-portal-nav";
+import { CATALOG_SPORT_KEYS, type CatalogSportKey } from "~/lib/catalog-sports";
 import {
   createSportBody,
   deleteSportBody,
@@ -11,26 +12,9 @@ import {
 } from "~/lib/sport-bodies-api";
 
 /** One governing body per sport type — matches API `sport_type`. */
-const SPORT_BODY_SPORT_OPTIONS = [
-  "cricket",
-  "football",
-  "rugby",
-  "hockey",
-  "tennis",
-  "chess",
-  "darts",
-  "boxing",
-  "karate",
-  "athletics",
-  "swimming",
-  "netball",
-  "golf",
-  "basketball",
-  "volleyball",
-  "cycling",
-] as const;
+const SPORT_BODY_SPORT_OPTIONS = CATALOG_SPORT_KEYS;
 
-export type SportTypeKey = (typeof SPORT_BODY_SPORT_OPTIONS)[number];
+export type SportTypeKey = CatalogSportKey;
 
 function capitalizeSport(s: string): string {
   if (!s) return "";

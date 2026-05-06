@@ -5,7 +5,7 @@ import { ApproverPortalNav } from "~/components/approver-portal-nav";
 import { listApplications } from "~/lib/applications-api";
 import { listApprovals } from "~/lib/approvals-api";
 import { getApiBaseUrl } from "~/lib/api";
-import { isLatestImmigrationTerminal, isLatestPrimaryBodyApproved } from "~/lib/approver-approval-helpers";
+import { isLatestPrimaryBodyApproved } from "~/lib/approver-approval-helpers";
 import { getCurrentUser, normalizeApproverBody } from "~/lib/auth";
 import { reviewerRoutingBodyFromSession } from "~/lib/users-api";
 import { formatDateTime, labelEventType } from "~/lib/application-display";
@@ -23,7 +23,6 @@ type DashboardStatus =
   | "underReview"
   | "infoRequested"
   | "awaitingInformation"
-  | "awaitingImmigration"
   | "approved"
   | "rejected";
 type StatusFilter = "all" | DashboardStatus | "historical" | "overdue";
@@ -45,8 +44,6 @@ type ApplicationRecord = {
   status: DashboardStatus;
   /** When true, SRC reviewer may OPEN (ZIFA latest approved). Only meaningful for SRC users. */
   srcOpenEligible?: boolean;
-  /** When true, immigration reviewer may OPEN (no terminal IMMIGRATION decision yet). Only for IMMIGRATION users. */
-  immigrationOpenEligible?: boolean;
   overdue?: boolean;
   assignee?: {
     initials: string;
@@ -71,7 +68,8 @@ function apiStatusToDashboard(status: string | undefined): DashboardStatus {
   if (s === "awaiting_src" || s === "under_review") return "underReview";
   if (s === "information_requested") return "infoRequested";
   if (s === "awaiting_information") return "awaitingInformation";
-  if (s === "awaiting_immigration") return "awaitingImmigration";
+  /** Legacy status: immigration stage removed — show with approved work queue. */
+  if (s === "awaiting_immigration") return "approved";
   /** Final outcomes: same dashboard bucket / “Approved” filter. */
   if (s === "approved" || s === "certificate_issued") return "approved";
   if (s === "rejected") return "rejected";
@@ -89,7 +87,6 @@ const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "underReview", label: "Awaiting SRC" },
   { value: "infoRequested", label: "Info Requested" },
   { value: "awaitingInformation", label: "Awaiting Information" },
-  { value: "awaitingImmigration", label: "Awaiting Immigration" },
   { value: "approved", label: "Status: APPROVED" },
   { value: "rejected", label: "Rejected" },
   { value: "historical", label: "Historical" },
@@ -101,7 +98,6 @@ const HISTORICAL_STATUSES: DashboardStatus[] = ["approved", "rejected"];
 /** Default queue filter when the URL has no `?status=` (or an invalid value). */
 function defaultStatusFilterForReviewerBody(body: ApproverBody): StatusFilter {
   if (body === "SRC") return "underReview";
-  if (body === "IMMIGRATION") return "awaitingImmigration";
   return "awaitingReview";
 }
 
@@ -112,7 +108,6 @@ function resolveStatusFilterFromUrl(urlStatus: string | null, body: ApproverBody
     urlStatus === "underReview" ||
     urlStatus === "infoRequested" ||
     urlStatus === "awaitingInformation" ||
-    urlStatus === "awaitingImmigration" ||
     urlStatus === "approved" ||
     urlStatus === "rejected" ||
     urlStatus === "historical" ||
@@ -174,7 +169,7 @@ const getStatusPillClasses = (status: DashboardStatus) => {
   if (status === "infoRequested") {
     return "bg-secondary-fixed text-on-secondary-fixed-variant";
   }
-  if (status === "awaitingInformation" || status === "awaitingImmigration") {
+  if (status === "awaitingInformation") {
     return "bg-tertiary/15 text-tertiary";
   }
   if (status === "underReview") {
@@ -196,12 +191,10 @@ const getStatusLabel = (status: DashboardStatus, rawApiStatus?: string) => {
   if (status === "awaitingInformation") {
     return "Awaiting information";
   }
-  if (status === "awaitingImmigration") {
-    return "Awaiting immigration";
-  }
   if (status === "approved") {
     const r = (rawApiStatus ?? "").trim().toLowerCase();
     if (r === "certificate_issued") return "Certificate issued";
+    if (r === "awaiting_immigration") return "Legacy: finalise on server";
     return "Approved";
   }
   return "Rejected";
@@ -216,9 +209,6 @@ function isApproverActionable(application: ApplicationRecord, body: ApproverBody
   if (body === "SRC") {
     return application.status === "underReview" && application.srcOpenEligible === true;
   }
-  if (body === "IMMIGRATION") {
-    return application.status === "awaitingImmigration" && application.immigrationOpenEligible === true;
-  }
   return application.status === "awaitingReview";
 }
 
@@ -230,7 +220,6 @@ function getApproverActionLabel(application: ApplicationRecord, body: ApproverBo
 
 function approverPortalTitle(body: ApproverBody): string {
   if (body === "SRC") return "Official Approver Portal - SRC Queue";
-  if (body === "IMMIGRATION") return "Official Approver Portal - Immigration Queue";
   if (body) return `Official Approver Portal - ${body} Queue`;
   return "Official Approver Portal";
 }
@@ -301,7 +290,6 @@ export default component$(() => {
     selectedStatus.value = resolveStatusFilterFromUrl(location.url.searchParams.get("status"), approverBody.value);
     const body = approverBody.value;
     const srcEligibility = new Map<string, boolean>();
-    const immigrationEligibility = new Map<string, boolean>();
     if (body === "SRC") {
       const underReview = r.data.filter((a) => {
         const st = (a.status ?? "").trim().toLowerCase();
@@ -325,28 +313,13 @@ export default component$(() => {
         );
       }
     }
-    if (body === "IMMIGRATION") {
-      const awaitingImmigration = r.data.filter(
-        (a) => (a.status ?? "").trim().toLowerCase() === "awaiting_immigration",
-      );
-      const batchSize = 8;
-      for (let i = 0; i < awaitingImmigration.length; i += batchSize) {
-        const batch = awaitingImmigration.slice(i, i + batchSize);
-        await Promise.all(
-          batch.map(async (app) => {
-            const appr = await listApprovals({ application_id: app.id, limit: 50, offset: 0 });
-            immigrationEligibility.set(app.id, appr.ok && !isLatestImmigrationTerminal(appr.data));
-          }),
-        );
-      }
-    }
 
     applications.length = 0;
     for (const app of r.data) {
       const orgId = app.organisation_id?.trim();
       const orgRow = orgId ? orgRows.get(orgId) : undefined;
       const routeSport = routingSportForApplication(app.sport, orgRow?.sport);
-      if (body && body !== "SRC" && body !== "IMMIGRATION") {
+      if (body && body !== "SRC") {
         const primary = resolvePrimaryBodyFromOrgSport(routeSport, zs, sb);
         if (!reviewerPrimaryCodesEqual(primary.code, body)) continue;
       }
@@ -366,10 +339,6 @@ export default component$(() => {
         apiStatusRaw: app.status ?? undefined,
         srcOpenEligible:
           body === "SRC" && st === "underReview" ? (srcEligibility.get(app.id) ?? false) : undefined,
-        immigrationOpenEligible:
-          body === "IMMIGRATION" && st === "awaitingImmigration"
-            ? (immigrationEligibility.get(app.id) ?? false)
-            : undefined,
       });
     }
   });

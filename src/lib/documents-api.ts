@@ -1,7 +1,7 @@
 import { apiFetchBlob } from "~/lib/auth";
 
 /** Logical DB path prefix enforced server-side (`validApplicationDocPath`). */
-export const APPLICATION_DOC_PATH_PREFIX = "upload_zfta_docs/";
+export const APPLICATION_DOC_PATH_PREFIX = "uploads/";
 
 const MAX_APPLICATION_DOC_PATH_LEN = 255;
 

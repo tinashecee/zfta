@@ -56,7 +56,6 @@ function stakeLabel(s: GovernanceStake["state"]): string {
 function governanceIconName(row: GovernanceStake): string {
   if (row.state === "rejected") return "cancel";
   if (row.name === "SRC") return "info";
-  if (row.name === "IMMIGRATION") return "pending";
   return "verified_user";
 }
 
@@ -660,8 +659,14 @@ export default component$(() => {
                     Documents
                   </h3>
                   <div class="grid sm:grid-cols-2 gap-6 text-sm">
-                    <ApplicationDocumentLink kind="Support (invitation)" storedPath={app.support_documents} />
-                    <ApplicationDocumentLink kind="Travel / identity" storedPath={app.travel_documents} />
+                    <ApplicationDocumentLink kind="2.1 Compliance declaration" storedPath={app.compliance_declaration_doc} />
+                    <ApplicationDocumentLink kind="2.3 Invitation letter" storedPath={app.invitation_letter_doc} />
+                    <ApplicationDocumentLink
+                      kind="2.4 National association clearance"
+                      storedPath={app.national_assoc_clearance_doc}
+                    />
+                    <ApplicationDocumentLink kind="2.9 Proof of funding" storedPath={app.funding_proof_doc} />
+                    <ApplicationDocumentLink kind="2.7 Liabilities & expenditure" storedPath={app.liabilities_breakdown_doc} />
                   </div>
                 </div>
 

@@ -8,7 +8,7 @@ export type AuthUser = {
   full_name: string;
   mobile_number?: string;
   body?: string | null;
-  /** Reviewer kind from API: SPORTS_BODY, SRC, IMMIGRATION */
+  /** Reviewer kind from API: SPORTS_BODY, SRC */
   approver_body?: string | null;
   /** Sport-body row id as string (varchar) when `approver_body` is SPORTS_BODY */
   sports_body?: string | null;
@@ -380,19 +380,20 @@ export async function apiFetchFormData<T>(
   return { ok: true, data };
 }
 
-const FIXED_REVIEWER_BODIES = new Set(["ZIFA", "SRC", "IMMIGRATION"]);
+const FIXED_REVIEWER_BODIES = new Set(["ZIFA", "SRC"]);
 
 function isSportBodyCodeToken(s: string): boolean {
   return /^[A-Z0-9][A-Z0-9_-]{0,40}$/.test(s);
 }
 
 /**
- * Normalized approver `body`: SRC, IMMIGRATION, legacy ZIFA, or a sport-body `code` from the catalog.
+ * Normalized approver `body`: SRC, legacy ZIFA, or a sport-body `code` from the catalog.
  */
 export function normalizeApproverBody(body: string | null | undefined): string | null {
   const b = body?.trim();
   if (!b) return null;
   const u = b.toUpperCase();
+  if (u === "IMMIGRATION") return null;
   if (FIXED_REVIEWER_BODIES.has(u)) return u;
   if (isSportBodyCodeToken(u)) return u;
   return null;
@@ -407,7 +408,8 @@ export function reviewerHasValidApproverProfile(
   user: Pick<AuthUser, "body" | "approver_body" | "sport_body_id" | "sports_body">,
 ): boolean {
   const ab = (user.approver_body ?? "").trim().toUpperCase();
-  if (ab === "SRC" || ab === "IMMIGRATION") return true;
+  if (ab === "SRC") return true;
+  if (ab === "IMMIGRATION") return false;
   if (ab === "SPORTS_BODY") {
     if (coerceSportsBodyToString(user.sports_body).length > 0) return true;
     return user.sport_body_id != null && Number(user.sport_body_id) > 0;
@@ -481,7 +483,7 @@ export async function signIn(params: {
       return {
         ok: false,
         error:
-          "Approver profile is incomplete. Choose Sports body (with a sport body), SRC, or IMMIGRATION.",
+          "Approver profile is incomplete. Choose Sports body (with a sport body) or SRC.",
       };
     }
   }
@@ -564,7 +566,7 @@ export async function resetPasswordWithToken(params: {
 /**
  * Public self-service registration — `POST /api/v1/auth/sign-up` (no `Authorization` header).
  * Expected keys: `email`, `password`, `full_name`, `mobile_number`, `role`;
- * optional `approver_body` (`SPORTS_BODY` | `SRC` | `IMMIGRATION`) and string `sports_body` (sport-body id) when kind is sports body.
+ * optional `approver_body` (`SPORTS_BODY` | `SRC`) and string `sports_body` (sport-body id) when kind is sports body.
  */
 export async function signUp(
   body: Record<string, unknown>,
