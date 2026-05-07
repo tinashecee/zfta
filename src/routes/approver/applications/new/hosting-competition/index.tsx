@@ -126,7 +126,15 @@ export default component$(() => {
                 : "mb-6 rounded-xl border border-primary/25 bg-primary/5 p-4 text-sm text-primary"
             }
           >
-            {submitError.value ?? submitProgressMessage.value}
+            <div class="flex items-start gap-3">
+              {submitBusy.value && !submitError.value ? (
+                <span
+                  class="mt-0.5 inline-block size-4 shrink-0 rounded-full border-2 border-current border-t-transparent motion-safe:animate-spin"
+                  aria-hidden
+                />
+              ) : null}
+              <span>{submitError.value ?? submitProgressMessage.value}</span>
+            </div>
           </div>
         ) : null}
 
@@ -146,7 +154,9 @@ export default component$(() => {
             <div class="lg:col-span-8 bg-surface-container-lowest p-8 rounded-xl shadow-sm border border-outline-variant/15">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-1.5">
-                  <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">Start date</label>
+                  <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">
+                    Start date <span class="text-primary">(required)</span>
+                  </label>
                   <input
                     name="start_date"
                     class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
@@ -155,7 +165,9 @@ export default component$(() => {
                   />
                 </div>
                 <div class="space-y-1.5">
-                  <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">End date</label>
+                  <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">
+                    End date <span class="text-primary">(required)</span>
+                  </label>
                   <input
                     name="end_date"
                     class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
@@ -170,6 +182,7 @@ export default component$(() => {
           <section class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             <div class="lg:col-span-4 sticky top-24">
               <h2 class="text-2xl font-bold font-headline text-primary mb-2">Hosting pack (3.1)</h2>
+              <p class="text-sm text-on-surface-variant leading-relaxed">All five documents are required.</p>
             </div>
             <div class="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-4">
               <AttachmentField title="Hosting plan" apiFieldHint="hosting_plan (API)" file={hostingPlan} />

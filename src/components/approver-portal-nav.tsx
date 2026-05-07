@@ -5,6 +5,7 @@ import { listSportBodies, sportBodyApprovalCode } from "~/lib/sport-bodies-api";
 
 type ApproverNavItemKey =
   | "dashboard"
+  | "myApplications"
   | "createApplication"
   | "pendingQueue"
   | "approved"
@@ -25,6 +26,7 @@ const NAV_ITEMS: Array<{
   filled?: boolean;
 }> = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard", href: "/approver/dashboard/" },
+  { key: "myApplications", label: "My applications", icon: "folder_shared", href: "/approver/my-applications/" },
   { key: "createApplication", label: "Create application", icon: "add_circle", href: "/approver/applications/new/", filled: true },
   { key: "pendingQueue", label: "Pending Queue", icon: "pending_actions", href: "/approver/dashboard/" },
   { key: "approved", label: "Approved", icon: "verified_user", href: "/approver/dashboard/?status=approved", filled: true },
@@ -38,6 +40,7 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
   const affiliationPrimary = useSignal<string | null>(null);
   const affiliationSecondary = useSignal<string | null>(null);
   const showSportBodyCreate = useSignal(false);
+  const showMyApplications = useSignal(false);
 
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(async () => {
@@ -59,6 +62,8 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
         legacyBody === "SPORT_BODY" ||
         legacyBody === "SPORTS_BODY" ||
         Boolean(row));
+
+    showMyApplications.value = u?.role === "reviewer" && Boolean(String(u.organisation_id ?? "").trim());
 
     if (row) {
       const code = sportBodyApprovalCode(row);
@@ -186,7 +191,11 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
             </div>
 
             <div class="flex-1 space-y-2">
-              {NAV_ITEMS.filter((i) => i.key !== "createApplication" || showSportBodyCreate.value).map((item) => (
+              {NAV_ITEMS.filter((i) => {
+                if (i.key === "createApplication") return showSportBodyCreate.value;
+                if (i.key === "myApplications") return showMyApplications.value;
+                return true;
+              }).map((item) => (
                 <a
                   key={item.key}
                   class={

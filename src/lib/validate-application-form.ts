@@ -24,6 +24,8 @@ export function validateNewApplicationFormData(fd: FormData): string | null {
     const return_date = String(fd.get("return_date") ?? "").trim();
     if (!return_date) return "Departure date is required.";
     if (return_date < departure_date) return "Departure date must be on or after the arrival date.";
+    const represented_country = String(fd.get("represented_country") ?? "").trim();
+    if (!represented_country) return "Country represented is required.";
     const training_facility_name = String(fd.get("training_facility_name") ?? "").trim();
     if (!training_facility_name) return "Accommodation establishment (1.7) is required.";
     return null;

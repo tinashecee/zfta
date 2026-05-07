@@ -49,7 +49,7 @@ function orgType(o: ApiOrganisation): string {
 }
 
 function isNsa(o: Pick<ApiOrganisation, "org_type" | "organization_type">): boolean {
-  return orgType(o) === NSA_TYPE;
+  return norm(o.org_type ?? o.organization_type) === NSA_TYPE;
 }
 
 type CreateEditForm = {

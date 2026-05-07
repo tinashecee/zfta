@@ -174,7 +174,15 @@ export default component$(() => {
             {submitError.value ? (
               <p class="font-medium">{submitError.value}</p>
             ) : (
-              <p class="font-medium">{submitProgressMessage.value}</p>
+              <p class="font-medium flex items-start gap-3">
+                {submitBusy.value ? (
+                  <span
+                    class="mt-0.5 inline-block size-4 shrink-0 rounded-full border-2 border-current border-t-transparent motion-safe:animate-spin"
+                    aria-hidden
+                  />
+                ) : null}
+                <span>{submitProgressMessage.value}</span>
+              </p>
             )}
           </div>
         ) : null}

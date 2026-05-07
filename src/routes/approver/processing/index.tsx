@@ -121,12 +121,6 @@ function srcReadOnlyExplanation(
       body: "SRC actions are available when the application status is awaiting SRC.",
     };
   }
-  if (!hasAnySportBodyApproved(approvals)) {
-    return {
-      title: `Awaiting ${primaryLabel}`,
-      body: `Open this file once ${primaryLabel} has recorded an approval on the application.`,
-    };
-  }
   if (isLatestSrcTerminal(approvals)) {
     return {
       title: "SRC decision recorded",
@@ -386,7 +380,15 @@ export default component$(() => {
                       {getGovernanceChipPair(approvals.value, {
                         code: primaryBodyCode.value,
                         label: primaryBodyLabel.value,
-                      }).chips.map((chip) => (
+                      }).chips
+                        .filter((chip) => {
+                          const at = (app.application_type ?? "").trim().toLowerCase();
+                          if (at === "incoming_tour" || at === "hosting_competition") {
+                            return chip.key === "SRC";
+                          }
+                          return true;
+                        })
+                        .map((chip) => (
                         <div key={chip.key} class={chip.chipClass}>
                           <span class="material-symbols-outlined text-[14px]">{chip.icon}</span>
                           {chip.label}

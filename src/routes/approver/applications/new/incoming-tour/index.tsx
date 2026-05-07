@@ -132,7 +132,15 @@ export default component$(() => {
             }
             role={submitError.value ? "alert" : "status"}
           >
-            {submitError.value ?? submitProgressMessage.value}
+            <div class="flex items-start gap-3">
+              {submitBusy.value && !submitError.value ? (
+                <span
+                  class="mt-0.5 inline-block size-4 shrink-0 rounded-full border-2 border-current border-t-transparent motion-safe:animate-spin"
+                  aria-hidden
+                />
+              ) : null}
+              <span>{submitError.value ?? submitProgressMessage.value}</span>
+            </div>
           </div>
         ) : null}
 

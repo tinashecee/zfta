@@ -373,6 +373,7 @@ export async function createUser(body: {
   password: string;
   full_name: string;
   mobile_number?: string;
+  organisation_id?: string | null;
   body?: string;
   approver_body?: string;
   /** Sport-body row id as string (varchar) when `approver_body` is `SPORTS_BODY` */

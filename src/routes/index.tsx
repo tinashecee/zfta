@@ -33,6 +33,7 @@ export default component$(() => {
 
     const u = getCurrentUser();
     if (u) {
+      console.info("[home] session user after sign-in", u);
       const path = await resolveApplicantPostLoginPath(u);
       window.location.assign(path);
     }

@@ -2,6 +2,7 @@ import { component$ } from "@builder.io/qwik";
 
 /** Minimal event fields for hosting applications (API still requires event_type, tournament, host country). */
 export const HostingEventBasicsSection = component$(() => {
+  const REQ = " (required)";
   return (
     <section class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
       <div class="lg:col-span-4 sticky top-24">
@@ -13,7 +14,9 @@ export const HostingEventBasicsSection = component$(() => {
         <input type="hidden" name="event_type" value="tournament" />
         <input type="hidden" name="tournament_name" value="Other" />
         <div class="space-y-1.5">
-          <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">Competition / event name</label>
+          <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">
+            Competition / event name<span class="text-primary">{REQ}</span>
+          </label>
           <input
             name="tournament_name_other"
             class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
@@ -23,7 +26,9 @@ export const HostingEventBasicsSection = component$(() => {
           />
         </div>
         <div class="space-y-1.5">
-          <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">Host country</label>
+          <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">
+            Host country<span class="text-primary">{REQ}</span>
+          </label>
           <input
             name="host_country"
             class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
@@ -43,12 +48,15 @@ export const HostingEventBasicsSection = component$(() => {
           />
         </div>
         <div class="space-y-1.5">
-          <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">Event title (optional override)</label>
+          <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">
+            Event display name<span class="text-primary">{REQ}</span>
+          </label>
           <input
             name="event_display_name"
             class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
-            placeholder="Defaults to competition name + host country"
+            placeholder="e.g. COSAFA Senior Challenge — Harare"
             type="text"
+            required
           />
         </div>
       </div>

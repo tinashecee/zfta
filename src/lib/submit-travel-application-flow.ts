@@ -37,15 +37,15 @@ export async function submitTravelApplicationFlow(
   fd.set("application_type", params.applicationType);
 
   const formValidation = validateNewApplicationFormData(fd);
-  if (formValidation) return { ok: false, error: formValidation };
+  if (formValidation) return { ok: false as const, error: formValidation };
 
   const leadDateKey = params.applicationType === "hosting_competition" ? "start_date" : "departure_date";
   const leadDate = String(fd.get(leadDateKey) ?? "").trim();
   const leadErr = validateMinLeadDays(leadDate, params.minLeadDays);
-  if (leadErr) return { ok: false, error: leadErr };
+  if (leadErr) return { ok: false as const, error: leadErr };
 
   if (fd.get("declaration_accepted") !== "on") {
-    return { ok: false, error: "Please accept the declaration to submit." };
+    return { ok: false as const, error: "Please accept the declaration to submit." };
   }
   const requiredUploadKeys: Record<ApplicationTypeKey, string[]> = {
     outgoing_tour: [
@@ -73,24 +73,24 @@ export async function submitTravelApplicationFlow(
   }
   if (params.applicationType !== "hosting_competition") {
     if (params.personnel.length === 0) {
-      return { ok: false, error: "Add at least one person to the roster (traveller or key contact)." };
+      return { ok: false as const, error: "Add at least one person to the roster (traveller or key contact)." };
     }
     const emptyRole = params.personnel.find((r) => !String(r.role ?? "").trim());
     if (emptyRole) {
-      return { ok: false, error: "Each roster row must have a role (e.g. player, coach, official)." };
+      return { ok: false as const, error: "Each roster row must have a role (e.g. player, coach, official)." };
     }
   }
   if (
     params.applicationType === "outgoing_tour" &&
     !params.personnel.some((r) => String(r.role ?? "").trim().toLowerCase() === "player")
   ) {
-    return { ok: false, error: 'Outgoing tour roster must include at least one person with role "player".' };
+    return { ok: false as const, error: 'Outgoing tour roster must include at least one person with role "player".' };
   }
   if (
     params.applicationType === "incoming_tour" &&
     !params.personnel.some((r) => String(r.role ?? "").trim().toLowerCase() === "player")
   ) {
-    return { ok: false, error: 'Incoming tour roster must include at least one person with role "player".' };
+    return { ok: false as const, error: 'Incoming tour roster must include at least one person with role "player".' };
   }
 
   const up = await (async () => {
@@ -117,7 +117,7 @@ export async function submitTravelApplicationFlow(
       organising_committee_composition: params.uploads.organising_committee_composition as File,
     });
   })();
-  if (!up.ok) return { ok: false, error: up.error };
+  if (!up.ok) return { ok: false as const, error: up.error };
 
   const cr = await (async () => {
     if (params.applicationType === "outgoing_tour") {
@@ -221,7 +221,7 @@ export async function submitTravelApplicationFlow(
     application.officials_count = roleCounts.officials_count;
 
     const payloadCheck = validateApplicationPayload(application);
-    if (payloadCheck) return { ok: false, error: payloadCheck };
+    if (payloadCheck) return { ok: false as const, error: payloadCheck };
 
     const payload = {
       application,
@@ -230,8 +230,8 @@ export async function submitTravelApplicationFlow(
     if (params.applicationType === "incoming_tour") return createIncomingTour(payload);
     return createHostingCompetition(payload);
   })();
-  if (!cr.ok) return { ok: false, error: cr.error };
+  if (!cr.ok) return { ok: false as const, error: cr.error };
 
-  const reference = String(cr.data?.reference_number ?? cr.data?.id ?? "").trim();
+  const reference = String(cr.data.reference_number ?? cr.data.id ?? "").trim();
   return { ok: true, reference };
 }

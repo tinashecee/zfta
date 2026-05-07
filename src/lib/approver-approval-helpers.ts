@@ -126,9 +126,9 @@ export function srcCanEditApplication(
 ): boolean {
   const as = (app.status ?? "").trim().toLowerCase();
   if (as !== "awaiting_src") return false;
-  // Simplified gating: allow SRC once any SPORT_BODY approval row is approved.
+  // For SRC: status `awaiting_src` means SRC may act, even if the server did not create a SPORT_BODY
+  // approval row (common for sport-body-created incoming/hosting applications).
   // (primaryBodyCode kept only for backwards-compat callers)
-  if (!hasAnySportBodyApproved(approvals)) return false;
   if (isLatestSrcTerminal(approvals)) return false;
   return true;
 }
