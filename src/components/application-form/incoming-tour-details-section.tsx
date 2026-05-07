@@ -7,33 +7,21 @@ export const IncomingTourDetailsSection = component$(() => {
       <div class="lg:col-span-4 sticky top-24">
         <h2 class="text-2xl font-bold font-headline text-primary mb-2">Incoming tour details</h2>
         <p class="text-sm text-on-surface-variant leading-relaxed">
-          Country or organization represented by the touring party, accommodation in Zimbabwe, and purpose of the tour.
+          Country represented by the touring party, accommodation establishment in Zimbabwe, and optional purpose/benefits.
         </p>
       </div>
 
       <div class="lg:col-span-8 bg-surface-container-lowest p-8 rounded-xl shadow-sm border border-outline-variant/15 space-y-6">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="space-y-1.5">
-            <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">
-              Organization represented (if any)
-            </label>
-            <input
-              name="opponent_team_name"
-              class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
-              placeholder="Touring club / federation / entity"
-              type="text"
-            />
-          </div>
-          <div class="space-y-1.5">
-            <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">Country represented</label>
-            <input
-              name="opponent_team_country"
-              class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
-              placeholder="e.g. South Africa"
-              type="text"
-              required
-            />
-          </div>
+        <div class="space-y-1.5">
+          <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">
+            Country represented (optional)
+          </label>
+          <input
+            name="represented_country"
+            class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
+            placeholder="e.g. South Africa"
+            type="text"
+          />
         </div>
 
         <div class="space-y-1.5">
@@ -51,13 +39,12 @@ export const IncomingTourDetailsSection = component$(() => {
 
         <div class="space-y-1.5">
           <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">
-            Purpose or benefits of hosting the tour (1.6)
+            Purpose or benefits of hosting the tour (optional)
           </label>
           <textarea
             name="event_description"
             class="w-full min-h-[120px] bg-surface-container-highest border-none rounded-xl px-4 py-3 focus:ring-1 focus:ring-primary/30 transition-all font-body"
             placeholder="Describe the purpose and expected benefits."
-            required
           />
         </div>
       </div>

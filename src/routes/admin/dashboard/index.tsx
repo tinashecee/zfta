@@ -12,6 +12,13 @@ function countByRole(users: ApiUser[]): Record<string, number> {
   return m;
 }
 
+function needsActivation(u: ApiUser): boolean {
+  const s = (u.status ?? "").trim().toLowerCase();
+  if (!s) return true;
+  if (s === "active" || s === "activated") return false;
+  return s === "pending_profile" || s === "pending_approval" || s === "inactive";
+}
+
 export default component$(() => {
   const loading = useSignal(true);
   const error = useSignal<string | null>(null);
@@ -31,6 +38,7 @@ export default component$(() => {
   });
 
   const byRole = () => (users.value ? countByRole(users.value) : {});
+  const activationCount = () => (users.value ? users.value.filter(needsActivation).length : 0);
 
   return (
     <div class="min-h-screen bg-background text-on-background">
@@ -69,6 +77,14 @@ export default component$(() => {
                   <p class="mt-2 font-headline text-4xl font-extrabold text-primary">{users.value?.length ?? 0}</p>
                   <p class="mt-1 text-xs text-on-surface-variant">From GET /api/v1/users (limit 500)</p>
                 </div>
+                <a
+                  class="rounded-xl bg-surface-container-low p-6 shadow-sm transition-all hover:bg-surface-container-highest"
+                  href="/admin/system-users/"
+                >
+                  <p class="text-[10px] font-bold uppercase tracking-widest text-outline">Needs activation</p>
+                  <p class="mt-2 font-headline text-3xl font-extrabold text-primary">{activationCount()}</p>
+                  <p class="mt-1 text-xs text-on-surface-variant">pending_profile · pending_approval · inactive</p>
+                </a>
                 {Object.entries(byRole()).map(([role, count]) => (
                   <div key={role} class="rounded-xl bg-surface-container-low p-6 shadow-sm">
                     <p class="text-[10px] font-bold uppercase tracking-widest text-outline">{role}</p>

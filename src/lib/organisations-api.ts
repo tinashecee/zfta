@@ -185,19 +185,3 @@ export async function deleteOrganisation(id: string) {
 export function organisationDisplayName(o: ApiOrganisation): string {
   return (o.org_name ?? o.name ?? o.organization_name ?? "").trim();
 }
-
-/** Compare org owner to logged-in user (JWT `sub` ↔ `user_id` on the row). */
-export function organisationOwnedByUser(org: ApiOrganisation, userId: string): boolean {
-  const uid = org.user_id ?? org.userId;
-  return String(uid ?? "").trim() === String(userId).trim();
-}
-
-/**
- * Fetches `GET /api/v1/organisations` and returns the row whose `user_id` matches `userId`, or `null`.
- */
-export async function getOrganisationForUser(userId: string) {
-  const r = await listOrganisations({ limit: 100, offset: 0 });
-  if (!r.ok) return r;
-  const organisation = r.data.find((o) => organisationOwnedByUser(o, userId)) ?? null;
-  return { ok: true as const, organisation };
-}

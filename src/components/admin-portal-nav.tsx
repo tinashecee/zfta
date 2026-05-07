@@ -4,6 +4,7 @@ import { getCurrentUser, signOut } from "~/lib/auth";
 type AdminNavItemKey =
   | "overview"
   | "accounts"
+  | "organisations"
   | "systemUsers"
   | "sportBodies"
   | "applications"
@@ -61,6 +62,7 @@ const NAV_ITEMS: Array<{
 }> = [
   { key: "overview", label: "Overview", icon: "dashboard", href: "/admin/dashboard/", filled: true },
   { key: "accounts", label: "Accounts", icon: "group", href: "/admin/accounts/" },
+  { key: "organisations", label: "Organisations", icon: "domain", href: "/admin/organisations/" },
   { key: "systemUsers", label: "System Users", icon: "manage_accounts", href: "/admin/system-users/" },
   { key: "sportBodies", label: "Sport bodies", icon: "groups", href: "/admin/sport-bodies/" },
   { key: "applications", label: "Applications", icon: "fact_check", href: "#" },

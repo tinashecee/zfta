@@ -7,6 +7,8 @@ export type AuthUser = {
   email: string;
   full_name: string;
   mobile_number?: string;
+  /** Applicant organisation FK (uuid) */
+  organisation_id?: string | null;
   body?: string | null;
   /** Reviewer kind from API: SPORTS_BODY, SRC */
   approver_body?: string | null;
@@ -95,6 +97,11 @@ export function normalizeApiUser(u: Partial<AuthUser> & Record<string, unknown>)
       if (typeof legacy === "number" && Number.isFinite(legacy)) return String(Math.trunc(legacy));
       return undefined;
     })(),
+    organisation_id:
+      pickOptionalStringField(raw, "organisation_id") ??
+      pickOptionalStringField(raw, "organisationId") ??
+      (u.organisation_id as string | null | undefined) ??
+      null,
     body: (u.body ?? null) as string | null,
     approver_body:
       pickOptionalStringField(raw, "approver_body") ??

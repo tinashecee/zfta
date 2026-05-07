@@ -10,7 +10,7 @@ export const HostingEventBasicsSection = component$(() => {
       </div>
 
       <div class="lg:col-span-8 bg-surface-container-lowest p-8 rounded-xl shadow-sm border border-outline-variant/15 space-y-4">
-        <input type="hidden" name="event_type" value="other" />
+        <input type="hidden" name="event_type" value="tournament" />
         <input type="hidden" name="tournament_name" value="Other" />
         <div class="space-y-1.5">
           <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">Competition / event name</label>
@@ -27,7 +27,8 @@ export const HostingEventBasicsSection = component$(() => {
           <input
             name="host_country"
             class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
-            defaultValue="Zimbabwe"
+            value="Zimbabwe"
+            readOnly
             type="text"
             required
           />

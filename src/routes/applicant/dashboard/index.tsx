@@ -4,7 +4,6 @@ import { ApplicantPortalNav } from "~/components/applicant-portal-nav";
 import { listApplications, type ApiApplication } from "~/lib/applications-api";
 import { applicantFacingStatusLabel } from "~/lib/application-display";
 import { getCurrentUser } from "~/lib/auth";
-import { getOrganisationForUser } from "~/lib/organisations-api";
 
 type ApplicationStatus = "pending" | "approved" | "rejected" | "draft";
 type StatusFilter = "all" | ApplicationStatus;
@@ -186,8 +185,8 @@ export default component$(() => {
       listLoading.value = false;
       return;
     }
-    const orgR = await getOrganisationForUser(u.id);
-    if (orgR.ok && !orgR.organisation) {
+    const orgId = String(u.organisation_id ?? "").trim();
+    if (!orgId) {
       window.location.assign("/applicant/organization-profile/?onboarding=1");
       return;
     }

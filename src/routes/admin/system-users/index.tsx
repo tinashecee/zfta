@@ -22,6 +22,7 @@ import {
 } from "~/lib/users-api";
 import { coerceSportsBodyToString } from "~/lib/auth";
 import { listSportBodies, sportBodyApprovalCode, sportBodyUserPayloadId, type ApiSportBody } from "~/lib/sport-bodies-api";
+import { getOrganisation, listOrganisations, organisationDisplayName, type ApiOrganisation } from "~/lib/organisations-api";
 
 export default component$(() => {
   const loading = useSignal(true);
@@ -44,6 +45,8 @@ export default component$(() => {
   const viewLoading = useSignal(false);
   const viewUser = useSignal<ApiUser | null>(null);
   const viewError = useSignal<string | null>(null);
+  const viewOrganisation = useSignal<ApiOrganisation | null>(null);
+  const viewOrganisationError = useSignal<string | null>(null);
 
   const email = useSignal("");
   const password = useSignal("");
@@ -57,10 +60,15 @@ export default component$(() => {
   const statusReason = useSignal("");
   const emailVerified = useSignal(false);
   const sportBodies = useSignal<ApiSportBody[]>([]);
+  const organisations = useSignal<ApiOrganisation[]>([]);
+  const organisationId = useSignal("");
 
   useVisibleTask$(async () => {
     const r = await listSportBodies({ limit: 500, offset: 0 });
     if (r.ok) sportBodies.value = r.data;
+
+    const or = await listOrganisations({ limit: 500, offset: 0 });
+    if (or.ok) organisations.value = or.data;
   });
 
   useVisibleTask$(async ({ track }) => {
@@ -85,6 +93,7 @@ export default component$(() => {
     password.value = "";
     fullName.value = "";
     mobile.value = "";
+    organisationId.value = "";
     approverBodyKind.value = "";
     sportsBodyCode.value = "";
     role.value = "applicant";
@@ -109,6 +118,7 @@ export default component$(() => {
     status.value = "pending_profile";
     statusReason.value = "";
     emailVerified.value = false;
+    organisationId.value = "";
 
     const r = await getUser(id);
     editFormLoading.value = false;
@@ -124,6 +134,7 @@ export default component$(() => {
     password.value = "";
     fullName.value = u.full_name;
     mobile.value = u.mobile_number ?? "";
+    organisationId.value = String(u.organisation_id ?? "").trim();
     const inf = inferApproverFormFromUser(u, sportBodies.value);
     approverBodyKind.value = inf.kind;
     sportsBodyCode.value = inf.sportsBodyCode;
@@ -138,6 +149,8 @@ export default component$(() => {
     viewLoading.value = true;
     viewError.value = null;
     viewUser.value = null;
+    viewOrganisation.value = null;
+    viewOrganisationError.value = null;
     const r = await getUser(id);
     viewLoading.value = false;
     if (!r.ok) {
@@ -145,12 +158,24 @@ export default component$(() => {
       return;
     }
     viewUser.value = r.data;
+
+    const oid = String(r.data.organisation_id ?? "").trim();
+    if (oid) {
+      const or = await getOrganisation(oid);
+      if (or.ok) {
+        viewOrganisation.value = or.data;
+      } else {
+        viewOrganisationError.value = or.error;
+      }
+    }
   });
 
   const closeView$ = $(() => {
     showViewModal.value = false;
     viewUser.value = null;
     viewError.value = null;
+    viewOrganisation.value = null;
+    viewOrganisationError.value = null;
   });
 
   const editFromView$ = $(() => {
@@ -158,6 +183,27 @@ export default component$(() => {
     if (!id) return;
     showViewModal.value = false;
     beginEdit$(id);
+  });
+
+  const setAccountStatus$ = $(async (nextStatus: string) => {
+    const id = viewUser.value?.id;
+    if (!id) return;
+    viewError.value = null;
+    viewLoading.value = true;
+    const r = await patchUser(id, { status: nextStatus });
+    if (!r.ok) {
+      viewLoading.value = false;
+      viewError.value = r.error;
+      return;
+    }
+    const refreshed = await getUser(id);
+    viewLoading.value = false;
+    if (!refreshed.ok) {
+      viewError.value = refreshed.error;
+      return;
+    }
+    viewUser.value = refreshed.data;
+    loadKey.value++;
   });
 
   const closeModal$ = $(() => {
@@ -192,6 +238,7 @@ export default component$(() => {
         email: email.value.trim(),
         full_name: fullName.value.trim(),
         mobile_number: mobile.value.trim() || undefined,
+        organisation_id: organisationId.value.trim() || null,
         role: role.value,
         status: status.value,
         status_reason: statusReason.value.trim() || undefined,
@@ -232,6 +279,7 @@ export default component$(() => {
         password: password.value,
         full_name: fullName.value.trim(),
         mobile_number: mobile.value.trim() || undefined,
+        organisation_id: organisationId.value.trim() || null,
         role: role.value,
         status: status.value,
         status_reason: statusReason.value.trim() || undefined,
@@ -547,6 +595,23 @@ export default component$(() => {
                 />
               </label>
               <label class="block text-xs font-bold uppercase text-outline">
+                Organisation (optional)
+                <select
+                  class="mt-1 w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm"
+                  value={organisationId.value}
+                  onChange$={(_, el) => {
+                    organisationId.value = el.value;
+                  }}
+                >
+                  <option value="">— None —</option>
+                  {organisations.value.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {organisationDisplayName(o) || o.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label class="block text-xs font-bold uppercase text-outline">
                 User role
                 <select
                   class="mt-1 w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm"
@@ -721,6 +786,24 @@ export default component$(() => {
                       {formatUserApproverSummary(viewUser.value, sportBodies.value)}
                     </dd>
                   </div>
+                  <div class="sm:col-span-2">
+                    <dt class="text-[10px] font-bold uppercase tracking-widest text-outline">Organisation</dt>
+                    <dd class="mt-1">
+                      {viewUser.value.organisation_id ? (
+                        viewOrganisation.value ? (
+                          <span class="font-medium text-on-surface">
+                            {organisationDisplayName(viewOrganisation.value) || viewOrganisation.value.id}
+                          </span>
+                        ) : viewOrganisationError.value ? (
+                          <span class="text-on-surface-variant">{viewOrganisationError.value}</span>
+                        ) : (
+                          <span class="text-on-surface-variant">{viewUser.value.organisation_id}</span>
+                        )
+                      ) : (
+                        <span class="text-on-surface-variant">—</span>
+                      )}
+                    </dd>
+                  </div>
                   {viewUser.value.approver_body ||
                   coerceSportsBodyToString(viewUser.value.sports_body) ||
                   viewUser.value.sport_body_id ? (
@@ -784,6 +867,27 @@ export default component$(() => {
             ) : null}
 
             <div class="mt-6 flex flex-wrap justify-end gap-3">
+              {viewUser.value ? (
+                viewUser.value.status?.trim().toLowerCase() === "active" ? (
+                  <button
+                    type="button"
+                    class="rounded-xl bg-surface-container-high px-4 py-2 text-sm font-bold text-on-surface-variant hover:bg-surface-container-highest"
+                    disabled={viewLoading.value}
+                    onClick$={$(() => setAccountStatus$("inactive"))}
+                  >
+                    Deactivate
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    class="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+                    disabled={viewLoading.value}
+                    onClick$={$(() => setAccountStatus$("active"))}
+                  >
+                    Activate
+                  </button>
+                )
+              ) : null}
               <button
                 type="button"
                 class="rounded-xl px-4 py-2 text-sm font-bold text-on-surface-variant"

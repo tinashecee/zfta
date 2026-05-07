@@ -14,6 +14,7 @@ import {
   sportBodiesForApproverSelect,
   type ApiSportBody,
 } from "~/lib/sport-bodies-api";
+import { listOrganisations, organisationDisplayName, type ApiOrganisation } from "~/lib/organisations-api";
 
 /** Values accepted by `POST /api/v1/auth/sign-up` */
 const SIGNUP_ROLES = ["applicant", "reviewer", "supervisor", "system_admin"] as const;
@@ -26,6 +27,8 @@ type SignUpFormState = {
   full_name: string;
   mobile_number: string;
   role: SignUpRole;
+  /** Organisation id for NSA reviewer accounts */
+  organisation_id: string;
   /** `SPORTS_BODY` | `SRC` or "" */
   approver_body: string;
   /** Sport-body row id as string when `approver_body` is SPORTS_BODY */
@@ -40,6 +43,9 @@ function buildSignUpPayload(form: SignUpFormState): Record<string, unknown> {
     mobile_number: form.mobile_number.trim(),
     role: form.role,
   };
+  if (form.role === "reviewer" && form.organisation_id.trim()) {
+    payload.organisation_id = form.organisation_id.trim();
+  }
   if (form.role === "reviewer" && form.approver_body.trim()) {
     payload.approver_body = form.approver_body.trim().toUpperCase();
     if (payload.approver_body === "SPORTS_BODY") {
@@ -115,6 +121,7 @@ export default component$(() => {
     full_name: "",
     mobile_number: "",
     role: "applicant",
+    organisation_id: "",
     approver_body: "",
     sports_body: "",
   });
@@ -138,6 +145,7 @@ export default component$(() => {
   });
 
   const sportBodies = useSignal<ApiSportBody[]>([]);
+  const nsaOrganisations = useSignal<ApiOrganisation[]>([]);
 
   useTask$(() => {
     currentUser.value = getCurrentUser();
@@ -147,6 +155,14 @@ export default component$(() => {
   useVisibleTask$(async () => {
     const r = await listSportBodies({ limit: 500, offset: 0 });
     if (r.ok) sportBodies.value = r.data;
+
+    const or = await listOrganisations({ limit: 500, offset: 0 });
+    if (or.ok) {
+      nsaOrganisations.value = or.data.filter((o) => {
+        const t = String(o.org_type ?? o.organization_type ?? "").trim().toLowerCase();
+        return t === "national_sports_association";
+      });
+    }
   });
 
   const onSubmit$ = $(async () => {
@@ -163,6 +179,10 @@ export default component$(() => {
     }
 
     if (form.role === "reviewer") {
+      if (!form.organisation_id.trim()) {
+        roleFormError.value = "Select a National Sports Association.";
+        return;
+      }
       const k = form.approver_body.trim().toUpperCase();
       if (!k || !(APPROVER_BODY_KINDS as readonly string[]).includes(k)) {
         roleFormError.value = "Select an approver body type.";
@@ -422,6 +442,7 @@ export default component$(() => {
                       onChange$={(e) => {
                         form.role = (e.target as HTMLSelectElement).value as SignUpRole;
                         if (form.role !== "reviewer") {
+                          form.organisation_id = "";
                           form.approver_body = "";
                           form.sports_body = "";
                           roleFormError.value = "";
@@ -430,7 +451,7 @@ export default component$(() => {
                       required
                     >
                       <option value="applicant">Applicant</option>
-                      <option value="reviewer">Reviewer</option>
+                      <option value="reviewer">National Sports Association</option>
                       <option value="supervisor">Supervisor</option>
                       <option value="system_admin">System admin</option>
                     </select>
@@ -438,6 +459,28 @@ export default component$(() => {
 
                   {form.role === "reviewer" ? (
                     <>
+                      <div class="md:col-span-2">
+                        <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                          National Sports Association
+                        </label>
+                        <select
+                          class="w-full rounded-xl border-none bg-surface-container-low p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
+                          value={form.organisation_id}
+                          onChange$={(e) => {
+                            form.organisation_id = (e.target as HTMLSelectElement).value;
+                            roleFormError.value = "";
+                          }}
+                          required
+                        >
+                          <option value="">— Select —</option>
+                          {nsaOrganisations.value.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {organisationDisplayName(o) || o.id}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
                       <div class="md:col-span-2">
                         <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
                           Approver body type

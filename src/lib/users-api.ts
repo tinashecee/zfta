@@ -236,6 +236,15 @@ export function normalizeUserApiRow(u: unknown): ApiUser {
   const base = u as ApiUser;
   const rawAppr = r.approver_body ?? r["approverBody"] ?? r["ApproverBody"];
 
+  const rawOrgId = r.organisation_id ?? r["organisationId"] ?? r["organisation_id"] ?? r["organisationID"];
+  let organisation_id: string | null = base.organisation_id ?? null;
+  if (typeof rawOrgId === "string") {
+    const t = rawOrgId.trim();
+    organisation_id = t.length ? t : null;
+  } else if (rawOrgId != null && rawOrgId !== "") {
+    organisation_id = String(rawOrgId).trim() || null;
+  }
+
   const rawSportsVarchar = r.sports_body ?? r["sportsBody"];
   let sports_body: string | null = base.sports_body ?? null;
   if (typeof rawSportsVarchar === "string") {
@@ -290,7 +299,7 @@ export function normalizeUserApiRow(u: unknown): ApiUser {
     mobile_number = String(Math.trunc(rawMobile));
   }
 
-  return { ...base, sport_body_id, approver_body, sports_body, mobile_number };
+  return { ...base, organisation_id, sport_body_id, approver_body, sports_body, mobile_number };
 }
 
 /**
@@ -322,6 +331,7 @@ export type ApiUser = {
   email: string;
   full_name: string;
   mobile_number?: string | null;
+  organisation_id?: string | null;
   /** Legacy flat reviewer code; may still be set for older rows. */
   body?: string | null;
   /** Reviewer kind: SPORTS_BODY, SRC */

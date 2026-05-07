@@ -247,9 +247,10 @@ export async function createIncomingTour(body: {
   application: Record<string, unknown>;
   personnel: TravelPersonnelInput[];
 }) {
+  // Incoming tours endpoint expects a flat JSON body (not nested under `application`).
   const payload: Record<string, unknown> = {
     ...body.application,
-    personnel: body.personnel,
+    ...(Array.isArray(body.personnel) && body.personnel.length ? { personnel: body.personnel } : {}),
   };
   const r = await apiFetchJson<ApiApplication>("/api/v1/incoming-tours", {
     method: "POST",
@@ -263,9 +264,10 @@ export async function createHostingCompetition(body: {
   application: Record<string, unknown>;
   personnel: TravelPersonnelInput[];
 }) {
+  // Hosting competitions endpoint expects a flat JSON body (not nested under `application`).
   const payload: Record<string, unknown> = {
     ...body.application,
-    personnel: body.personnel,
+    ...(Array.isArray(body.personnel) && body.personnel.length ? { personnel: body.personnel } : {}),
   };
   const r = await apiFetchJson<ApiApplication>("/api/v1/hosting-competitions", {
     method: "POST",

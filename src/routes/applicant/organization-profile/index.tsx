@@ -1,17 +1,17 @@
 import { $, component$, useSignal, useStore, useVisibleTask$ } from "@builder.io/qwik";
 import { type DocumentHead, useLocation } from "@builder.io/qwik-city";
 import { ApplicantPortalNav } from "~/components/applicant-portal-nav";
-import { getCurrentUser } from "~/lib/auth";
+import { getCurrentUser, persistStoredSessionUser } from "~/lib/auth";
 import {
   createOrganisation,
   deleteOrganisation,
   getOrganisation,
-  getOrganisationForUser,
   organisationDisplayName,
   ORG_STATUSES,
   patchOrganisation,
   type ApiOrganisation,
 } from "~/lib/organisations-api";
+import { patchUser } from "~/lib/users-api";
 
 /** `models.ValidOrgType` — align with backend enum. */
 const ORG_TYPE_VALUES = [
@@ -417,19 +417,17 @@ export default component$(() => {
 
     loading.value = true;
     loadError.value = null;
-    const mine = await getOrganisationForUser(current.id);
-    loading.value = false;
-    if (!mine.ok) {
-      loadError.value = mine.error;
-      return;
-    }
-    if (!mine.organisation) {
+    const orgIdFromUser = String(current.organisation_id ?? "").trim();
+    if (!orgIdFromUser) {
+      loading.value = false;
       mode.value = "create";
       orgId.value = null;
       Object.assign(form, emptyForm());
       return;
     }
-    const detail = await getOrganisation(mine.organisation.id);
+
+    const detail = await getOrganisation(orgIdFromUser);
+    loading.value = false;
     if (!detail.ok) {
       loadError.value = detail.error;
       return;
@@ -456,11 +454,27 @@ export default component$(() => {
       if (mode.value === "create") {
         const payload = formToPayload(form);
         const r = await createOrganisation(payload);
-        saving.value = false;
         if (!r.ok) {
+          saving.value = false;
           formError.value = r.status === 409 ? "An organization already exists for your account." : r.error;
           return;
         }
+
+        const current = getCurrentUser();
+        if (!current?.id) {
+          saving.value = false;
+          formError.value = "You need to be signed in to link your organisation.";
+          return;
+        }
+        const ur = await patchUser(current.id, { organisation_id: r.data.id });
+        if (!ur.ok) {
+          saving.value = false;
+          formError.value = `Organisation created, but could not link it to your account: ${ur.error}`;
+          return;
+        }
+        persistStoredSessionUser({ ...current, organisation_id: r.data.id });
+
+        saving.value = false;
         mode.value = "edit";
         orgId.value = r.data.id;
         Object.assign(form, mapOrgToForm(r.data));

@@ -7,7 +7,7 @@ import { PersonnelSection } from "~/components/application-form/personnel-sectio
 import { SubmitBar } from "~/components/application-form/submit-bar";
 import { APPLICATION_TYPES } from "~/lib/application-types";
 import { getCurrentUser } from "~/lib/auth";
-import { getOrganisationForUser } from "~/lib/organisations-api";
+import { getOrganisation } from "~/lib/organisations-api";
 import { submitTravelApplicationFlow } from "~/lib/submit-travel-application-flow";
 import type { TravelPersonnelRow } from "~/lib/travel-personnel-types";
 
@@ -83,13 +83,19 @@ export default component$(() => {
       return;
     }
 
-    const orgR = await getOrganisationForUser(user.id);
-    if (!orgR.ok || !orgR.organisation?.id) {
-      submitError.value = orgR.ok ? "Complete your organisation profile before submitting." : orgR.error;
+    const orgId = String(user.organisation_id ?? "").trim();
+    if (!orgId) {
+      submitError.value = "Complete your organisation profile before submitting.";
       scrollSubmitFeedbackIntoView();
       return;
     }
-    const organisationSport = String(orgR.organisation.sport ?? "").trim();
+    const orgR = await getOrganisation(orgId);
+    if (!orgR.ok) {
+      submitError.value = orgR.error;
+      scrollSubmitFeedbackIntoView();
+      return;
+    }
+    const organisationSport = String(orgR.data.sport ?? "").trim();
     if (!organisationSport) {
       submitError.value =
         "Your organisation profile must include a sport. Update your organisation profile, then try again.";
@@ -111,7 +117,7 @@ export default component$(() => {
         funding_proof: fundingFile.value,
         liabilities_breakdown: liabilitiesFile.value,
       },
-      organisationId: String(orgR.organisation.id).trim(),
+      organisationId: orgId,
       organisationSport,
       applicationType: "outgoing_tour",
       minLeadDays: typeDef.minLeadDays,

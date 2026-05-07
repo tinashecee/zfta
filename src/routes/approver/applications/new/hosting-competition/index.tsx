@@ -2,17 +2,13 @@ import { $, component$, useSignal, useStore, useVisibleTask$ } from "@builder.io
 import type { DocumentHead } from "@builder.io/qwik-city";
 import { ApproverPortalNav } from "~/components/approver-portal-nav";
 import { AttachmentField } from "~/components/application-form/attachment-field";
-import { DatesSection } from "~/components/application-form/dates-section";
 import { DeclarationSection } from "~/components/application-form/declaration-section";
-import { DelegationSection } from "~/components/application-form/delegation-section";
 import { HostingEventBasicsSection } from "~/components/application-form/hosting-event-basics-section";
-import { PersonnelSection } from "~/components/application-form/personnel-section";
 import { SubmitBar } from "~/components/application-form/submit-bar";
 import { APPLICATION_TYPES } from "~/lib/application-types";
 import { getCurrentUser } from "~/lib/auth";
-import { getOrganisationForUser } from "~/lib/organisations-api";
+import { getOrganisation } from "~/lib/organisations-api";
 import { submitTravelApplicationFlow } from "~/lib/submit-travel-application-flow";
-import type { TravelPersonnelRow } from "~/lib/travel-personnel-types";
 
 export default component$(() => {
   useVisibleTask$(() => {
@@ -26,7 +22,6 @@ export default component$(() => {
     }
   });
 
-  const personnel = useStore<TravelPersonnelRow[]>([]);
   const hostingPlan = useSignal<File | null>(null);
   const budget = useSignal<File | null>(null);
   const funding = useSignal<File | null>(null);
@@ -56,10 +51,6 @@ export default component$(() => {
       submitError.value = "Please attach all five documents required under 3.1 (hosting plan, budget, funding, roll-out, committee).";
       return;
     }
-    if (personnel.length === 0) {
-      submitError.value = "Add at least one organising committee / LOC contact in the roster.";
-      return;
-    }
 
     const user = getCurrentUser();
     if (!user?.id) {
@@ -67,12 +58,17 @@ export default component$(() => {
       return;
     }
 
-    const orgR = await getOrganisationForUser(user.id);
-    if (!orgR.ok || !orgR.organisation?.id) {
-      submitError.value = orgR.ok ? "No organisation profile found for your account." : orgR.error;
+    const orgId = String(user.organisation_id ?? "").trim();
+    if (!orgId) {
+      submitError.value = "No organisation profile found for your account.";
       return;
     }
-    const organisationSport = String(orgR.organisation.sport ?? "").trim();
+    const orgR = await getOrganisation(orgId);
+    if (!orgR.ok) {
+      submitError.value = orgR.error;
+      return;
+    }
+    const organisationSport = String(orgR.data.sport ?? "").trim();
     if (!organisationSport) {
       submitError.value = "Organisation profile must include a sport.";
       return;
@@ -83,7 +79,7 @@ export default component$(() => {
 
     const result = await submitTravelApplicationFlow({
       form: resolved,
-      personnel,
+      personnel: [],
       uploads: {
         hosting_plan: hostingPlan.value,
         budget: budget.value,
@@ -91,7 +87,7 @@ export default component$(() => {
         roll_out_plan: rollOut.value,
         organising_committee_composition: committee.value,
       },
-      organisationId: String(orgR.organisation.id).trim(),
+      organisationId: orgId,
       organisationSport,
       applicationType: "hosting_competition",
       minLeadDays: typeDef.minLeadDays,
@@ -140,8 +136,36 @@ export default component$(() => {
 
         <form id="hosting-competition-form" class="space-y-12 mb-24" preventdefault:submit onSubmit$={onSubmit$}>
           <HostingEventBasicsSection />
-          <DatesSection leadHint={`Minimum ${typeDef.minLeadDays} days before the event.`} />
-          <DelegationSection />
+          <section class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            <div class="lg:col-span-4 sticky top-24">
+              <h2 class="text-2xl font-bold font-headline text-primary mb-2">Event dates</h2>
+              <p class="text-sm text-on-surface-variant leading-relaxed">
+                Minimum <span class="font-semibold text-primary">{typeDef.minLeadDays} days</span> before the event.
+              </p>
+            </div>
+            <div class="lg:col-span-8 bg-surface-container-lowest p-8 rounded-xl shadow-sm border border-outline-variant/15">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="space-y-1.5">
+                  <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">Start date</label>
+                  <input
+                    name="start_date"
+                    class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
+                    type="date"
+                    required
+                  />
+                </div>
+                <div class="space-y-1.5">
+                  <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">End date</label>
+                  <input
+                    name="end_date"
+                    class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
+                    type="date"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
 
           <section class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             <div class="lg:col-span-4 sticky top-24">
@@ -157,18 +181,6 @@ export default component$(() => {
                 apiFieldHint="organising_committee_composition (API)"
                 file={committee}
               />
-            </div>
-          </section>
-
-          <section class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <div class="lg:col-span-4 sticky top-24">
-              <h2 class="text-2xl font-bold font-headline text-primary mb-2">Key contact (roster)</h2>
-              <p class="text-sm text-on-surface-variant">
-                Add at least one LOC / committee contact so the application record includes a responsible person.
-              </p>
-            </div>
-            <div class="lg:col-span-8">
-              <PersonnelSection personnel={personnel} mode="create" />
             </div>
           </section>
 
