@@ -203,15 +203,22 @@ export type GovernanceChipPair = {
   chips: Array<{ key: string; label: string; icon: string; chipClass: string }>;
 };
 
-/** Two chips: primary sport body + SRC (immigration stage removed). */
+export type GovernanceChipPairOptions = {
+  /** When true, prepend a chip for approval body AFFILIATE (PSL sports affiliate). */
+  pslAffiliate?: boolean;
+};
+
+/** Primary sport body + SRC (immigration stage removed); optional PSL (AFFILIATE) chip first. */
 export function getGovernanceChipPair(
   approvals: ApiApproval[] | null | undefined,
   primary: { code: string; label: string },
+  options?: GovernanceChipPairOptions,
 ): GovernanceChipPair {
-  const codes = [
-    { code: primary.code, label: primary.label },
-    { code: "SRC", label: "SRC" },
-  ];
+  const codes: Array<{ code: string; label: string }> = [];
+  if (options?.pslAffiliate === true) {
+    codes.push({ code: "AFFILIATE", label: "PSL" });
+  }
+  codes.push({ code: primary.code, label: primary.label }, { code: "SRC", label: "SRC" });
   return {
     primary,
     chips: codes.map(({ code, label }) => {

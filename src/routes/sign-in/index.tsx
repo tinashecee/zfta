@@ -1,5 +1,6 @@
 import { $, component$, useSignal, useTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
+import { AppLogo } from "~/components/app-logo";
 import { useLocation } from "@builder.io/qwik-city";
 import { resolveApplicantPostLoginPath } from "~/lib/applicant-redirect";
 import { getCurrentUser, signIn, type AuthUser } from "~/lib/auth";
@@ -49,8 +50,11 @@ export default component$(() => {
       {/* TopNavBar Shell (from your provided HTML) */}
       <header class="fixed top-0 w-full z-50 bg-emerald-950/70 backdrop-blur-xl shadow-2xl shadow-emerald-950/20">
         <nav class="flex justify-between items-center px-8 py-4 max-w-full">
-          <div class="text-xl font-bold text-white tracking-tighter font-headline">
-            Zimbabwe Sports Travel Authority
+          <div class="flex min-w-0 items-center gap-3">
+            <AppLogo href="/" size="sm" />
+            <div class="text-xl font-bold text-white tracking-tighter font-headline truncate">
+              Zimbabwe Sports Travel Authority
+            </div>
           </div>
 
           <div class="flex items-center gap-4">
@@ -91,6 +95,9 @@ export default component$(() => {
             </div>
 
             <div class="relative z-10">
+              <div class="mb-6">
+                <AppLogo imgClass="max-h-14 sm:max-h-16" size="lg" />
+              </div>
               <span class="text-secondary-fixed font-headline font-bold tracking-widest text-xs uppercase mb-6 block">
                 Official Portal
               </span>
@@ -238,8 +245,11 @@ export default component$(() => {
       {/* Footer Shell */}
       <footer class="mt-auto bg-emerald-950 w-full shrink-0 py-12 px-8">
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div class="text-lg font-bold text-white font-headline">
-            Zimbabwe Sports Travel Authority
+          <div class="flex flex-col items-center gap-3 md:flex-row md:items-center">
+            <AppLogo href="/" size="lg" />
+            <div class="text-lg font-bold text-white font-headline text-center md:text-left">
+              Zimbabwe Sports Travel Authority
+            </div>
           </div>
           <div class="flex flex-wrap justify-center gap-8 font-body text-sm antialiased">
             <a class="text-emerald-200/60 hover:text-amber-400 transition-colors" href="#">

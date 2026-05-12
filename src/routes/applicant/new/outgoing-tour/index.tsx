@@ -95,6 +95,12 @@ export default component$(() => {
       scrollSubmitFeedbackIntoView();
       return;
     }
+    const pslAffiliate = Boolean(
+      (orgR.data as unknown as { psl_affiliate?: unknown; pslAffiliate?: unknown; PslAffiliate?: unknown })
+        .psl_affiliate ??
+        (orgR.data as unknown as { pslAffiliate?: unknown }).pslAffiliate ??
+        (orgR.data as unknown as { PslAffiliate?: unknown }).PslAffiliate,
+    );
     const organisationSport = String(orgR.data.sport ?? "").trim();
     if (!organisationSport) {
       submitError.value =
@@ -107,6 +113,7 @@ export default component$(() => {
     submitProgressMessage.value = "Uploading primary documents…";
     scrollSubmitFeedbackIntoView();
 
+    /** Queue is chosen in submit flow: football + PSL affiliate → awaiting_psl; else awaiting_sport_body. */
     const result = await submitTravelApplicationFlow({
       form: resolved,
       personnel,
@@ -119,6 +126,7 @@ export default component$(() => {
       },
       organisationId: orgId,
       organisationSport,
+      pslAffiliate,
       applicationType: "outgoing_tour",
       minLeadDays: typeDef.minLeadDays,
     });

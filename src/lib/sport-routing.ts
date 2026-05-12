@@ -107,7 +107,7 @@ export function reviewerPrimaryCodesEqual(resolvedCode: string, reviewerRoutingB
 
 /**
  * Maps organisation / application `sport` text to the first-line approver body using the catalog.
- * Falls back to ZIFA when the catalog is empty or no row matches (legacy data).
+ * If the catalog is empty or no row matches, fall back to a normalized token derived from the sport text.
  */
 export function resolvePrimaryBodyFromOrgSport(
   orgSport: string | null | undefined,
@@ -115,10 +115,14 @@ export function resolvePrimaryBodyFromOrgSport(
   sportBodies: ApiSportBody[],
 ): ResolvedPrimaryBody {
   const raw = orgSport?.trim();
-  const legacy = (): ResolvedPrimaryBody => ({ code: "ZIFA", label: "ZIFA" });
+  const fallbackFromText = (s: string): ResolvedPrimaryBody => {
+    const label = s.trim();
+    const code = label.toUpperCase().replace(/\s+/g, "_");
+    return { code, label };
+  };
 
-  if (!raw) return legacy();
-  if (!sportBodies.length) return legacy();
+  if (!raw) return { code: "SPORT_BODY", label: "Sport body" };
+  if (!sportBodies.length) return fallbackFromText(raw);
 
   if (zimbabweSports.length) {
     const lower = raw.toLowerCase();
@@ -145,5 +149,5 @@ export function resolvePrimaryBodyFromOrgSport(
   const direct = findSportBodyByRoutingHint(raw, sportBodies);
   if (direct) return resolvedFromSportBody(direct);
 
-  return legacy();
+  return fallbackFromText(raw);
 }

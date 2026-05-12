@@ -7,6 +7,8 @@ type AdminNavItemKey =
   | "organisations"
   | "systemUsers"
   | "sportBodies"
+  | "biddingEvents"
+  | "bids"
   | "applications"
   | "settings";
 
@@ -61,6 +63,8 @@ const NAV_ITEMS: Array<{
   filled?: boolean;
 }> = [
   { key: "overview", label: "Overview", icon: "dashboard", href: "/admin/dashboard/", filled: true },
+  { key: "biddingEvents", label: "Hosting events", icon: "emoji_events", href: "/admin/bidding-events/" },
+  { key: "bids", label: "Submitted bids", icon: "assignment", href: "/admin/bids/" },
   { key: "accounts", label: "Accounts", icon: "group", href: "/admin/accounts/" },
   { key: "organisations", label: "Organisations", icon: "domain", href: "/admin/organisations/" },
   { key: "systemUsers", label: "System Users", icon: "manage_accounts", href: "/admin/system-users/" },
@@ -95,7 +99,7 @@ export const AdminPortalNav = component$<AdminPortalNavProps>(({ activeItem }) =
 
   return (
     <>
-      <aside class="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r-0 bg-emerald-950 py-6 font-manrope tracking-tight shadow-2xl shadow-emerald-950/50 lg:flex">
+      <aside class="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r-0 bg-emerald-950 py-6 font-manrope tracking-tight shadow-2xl shadow-emerald-950/50 lg:flex overflow-hidden">
         <div class="mb-8 flex items-center gap-3 px-6">
           <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary-container">
             <span class="material-symbols-outlined text-on-secondary-container" style="font-variation-settings: 'FILL' 1;">
@@ -108,14 +112,14 @@ export const AdminPortalNav = component$<AdminPortalNavProps>(({ activeItem }) =
           </div>
         </div>
 
-        <nav class="flex-1 space-y-1">
+        <nav class="flex-1 space-y-1 overflow-y-auto px-2">
           {NAV_ITEMS.map((item) => (
             <a
               key={item.key}
               class={
                 item.key === activeItem
-                  ? "mx-2 flex items-center gap-3 rounded-lg bg-emerald-900/80 px-4 py-3 font-bold text-yellow-500 transition-transform active:scale-90"
-                  : "mx-2 flex items-center gap-3 rounded-lg px-4 py-3 text-emerald-100/70 transition-colors duration-200 hover:bg-emerald-800/50 hover:text-white"
+                  ? "flex items-center gap-3 rounded-lg bg-emerald-900/80 px-4 py-3 font-bold text-yellow-500 transition-transform active:scale-90"
+                  : "flex items-center gap-3 rounded-lg px-4 py-3 text-emerald-100/70 transition-colors duration-200 hover:bg-emerald-800/50 hover:text-white"
               }
               href={item.href}
             >
@@ -255,7 +259,7 @@ export const AdminPortalNav = component$<AdminPortalNavProps>(({ activeItem }) =
             </button>
           </div>
 
-          <nav class="space-y-1 px-2">
+          <nav class="space-y-1 px-2 overflow-y-auto max-h-[calc(100vh-14rem)]">
             {NAV_ITEMS.map((item) => (
               <a
                 key={item.key}

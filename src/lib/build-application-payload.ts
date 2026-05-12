@@ -14,7 +14,8 @@ export function buildApplicationRecordFromForm(
       | "awaiting_body"
       | "awaiting_zifa"
       | "awaiting_primary_body"
-      | "awaiting_sport_body";
+      | "awaiting_sport_body"
+      | "awaiting_psl";
     /** Until backend adds a column; API may ignore unknown keys. */
     application_type?: string | null;
     /** Free-text purpose / benefits (maps to API `event_description` when set). */

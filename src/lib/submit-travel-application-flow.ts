@@ -18,6 +18,8 @@ export type SubmitTravelApplicationFlowParams = {
   uploads: Record<string, File | null | undefined>;
   organisationId: string;
   organisationSport: string;
+  /** Whether the applicant organisation is a PSL affiliate (affects initial review queue). */
+  pslAffiliate: boolean;
   applicationType: ApplicationTypeKey;
   minLeadDays: number;
 };
@@ -25,6 +27,19 @@ export type SubmitTravelApplicationFlowParams = {
 export type SubmitTravelApplicationFlowResult =
   | { ok: true; reference: string }
   | { ok: false; error: string };
+
+/** Type A: football organisation + PSL affiliate → AFFILIATE queue; else Type B → sport-body queue. */
+export function initialTravelApplicationStatus(
+  organisationSport: string,
+  pslAffiliate: boolean,
+): "awaiting_psl" | "awaiting_sport_body" {
+  const sport = String(organisationSport ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+  const usePslRoute = sport === "football" && Boolean(pslAffiliate);
+  return usePslRoute ? "awaiting_psl" : "awaiting_sport_body";
+}
 
 /**
  * Shared client flow: validate form → upload attachments → build application → POST /applications.
@@ -120,6 +135,7 @@ export async function submitTravelApplicationFlow(
   if (!up.ok) return { ok: false as const, error: up.error };
 
   const cr = await (async () => {
+    const initialStatus = initialTravelApplicationStatus(params.organisationSport, params.pslAffiliate);
     if (params.applicationType === "outgoing_tour") {
       const host_country = String(fd.get("host_country") ?? "").trim();
       const departure_date = String(fd.get("departure_date") ?? "").trim();
@@ -128,6 +144,7 @@ export async function submitTravelApplicationFlow(
       const payload = {
         organisation_id: params.organisationId,
         sport: params.organisationSport || null,
+        status: initialStatus,
         host_country,
         departure_date,
         return_date,
@@ -153,6 +170,7 @@ export async function submitTravelApplicationFlow(
       const payload: Record<string, unknown> = {
         organisation_id: params.organisationId,
         sport: params.organisationSport || null,
+        status: initialStatus,
         host_country,
         departure_date,
         return_date,
@@ -186,6 +204,7 @@ export async function submitTravelApplicationFlow(
       const payload: Record<string, unknown> = {
         organisation_id: params.organisationId,
         sport: params.organisationSport || null,
+        status: initialStatus,
         event_type,
         tournament_name,
         tournament_name_other: tournament_name_other || null,
@@ -209,7 +228,7 @@ export async function submitTravelApplicationFlow(
       sport: params.organisationSport,
       support_documents: null,
       travel_documents: null,
-      status: "awaiting_body",
+      status: initialTravelApplicationStatus(params.organisationSport, params.pslAffiliate),
       application_type: null,
     });
     delete (application as Record<string, unknown>).status;

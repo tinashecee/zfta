@@ -1,24 +1,39 @@
 import { $, component$, useSignal, useStore, useTask$, useVisibleTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
+import { AppLogo } from "~/components/app-logo";
 import {
   getCurrentUser,
   signOut,
   signUp,
   type AuthUser,
 } from "~/lib/auth";
-import { APPROVER_BODY_KINDS, displayApproverBodyKind } from "~/lib/users-api";
-import {
-  listSportBodies,
-  sportBodyApprovalCode,
-  sportBodyUserPayloadId,
-  sportBodiesForApproverSelect,
-  type ApiSportBody,
-} from "~/lib/sport-bodies-api";
 import { listOrganisations, organisationDisplayName, type ApiOrganisation } from "~/lib/organisations-api";
 
 /** Values accepted by `POST /api/v1/auth/sign-up` */
-const SIGNUP_ROLES = ["applicant", "reviewer", "supervisor", "system_admin"] as const;
-type SignUpRole = (typeof SIGNUP_ROLES)[number];
+const UI_ROLES = [
+  "applicant",
+  "reviewer_nsa",
+  "reviewer_psl",
+  "supervisor",
+  "system_admin",
+] as const;
+type UiRole = (typeof UI_ROLES)[number];
+
+type ReviewerTrack = "nsa" | "psl" | "";
+
+function reviewerTrackFromRole(role: UiRole): ReviewerTrack {
+  if (role === "reviewer_nsa") return "nsa";
+  if (role === "reviewer_psl") return "psl";
+  return "";
+}
+
+function normalizeOrgTypeKey(raw: unknown): string {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/-+/g, "_");
+}
 
 type SignUpFormState = {
   email: string;
@@ -26,32 +41,24 @@ type SignUpFormState = {
   confirmPassword: string;
   full_name: string;
   mobile_number: string;
-  role: SignUpRole;
-  /** Organisation id for NSA reviewer accounts */
+  role: UiRole;
+  /** Organisation id for reviewer accounts */
   organisation_id: string;
-  /** `SPORTS_BODY` | `SRC` or "" */
-  approver_body: string;
-  /** Sport-body row id as string when `approver_body` is SPORTS_BODY */
-  sports_body: string;
 };
 
 function buildSignUpPayload(form: SignUpFormState): Record<string, unknown> {
+  const track = reviewerTrackFromRole(form.role);
   const payload: Record<string, unknown> = {
     email: form.email.trim().toLowerCase(),
     password: form.password,
     full_name: form.full_name.trim(),
     mobile_number: form.mobile_number.trim(),
-    role: form.role,
+    role: track ? "reviewer" : form.role,
   };
-  if (form.role === "reviewer" && form.organisation_id.trim()) {
-    payload.organisation_id = form.organisation_id.trim();
-  }
-  if (form.role === "reviewer" && form.approver_body.trim()) {
-    payload.approver_body = form.approver_body.trim().toUpperCase();
-    if (payload.approver_body === "SPORTS_BODY") {
-      const code = form.sports_body.trim();
-      if (code) payload.sports_body = code;
-    }
+  if (track) {
+    if (form.organisation_id.trim()) payload.organisation_id = form.organisation_id.trim();
+    // Backend `approver_requires_body` constraint expects `users.body` for reviewer accounts.
+    payload.body = track === "nsa" ? "SPORT_BODY" : "AFFILIATE";
   }
   return payload;
 }
@@ -122,8 +129,6 @@ export default component$(() => {
     mobile_number: "",
     role: "applicant",
     organisation_id: "",
-    approver_body: "",
-    sports_body: "",
   });
 
   const roleFormError = useSignal("");
@@ -144,8 +149,8 @@ export default component$(() => {
     confirmPassword: false,
   });
 
-  const sportBodies = useSignal<ApiSportBody[]>([]);
   const nsaOrganisations = useSignal<ApiOrganisation[]>([]);
+  const pslOrganisations = useSignal<ApiOrganisation[]>([]);
 
   useTask$(() => {
     currentUser.value = getCurrentUser();
@@ -153,15 +158,39 @@ export default component$(() => {
 
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(async () => {
-    const r = await listSportBodies({ limit: 500, offset: 0 });
-    if (r.ok) sportBodies.value = r.data;
-
     const or = await listOrganisations({ limit: 500, offset: 0 });
     if (or.ok) {
-      nsaOrganisations.value = or.data.filter((o) => {
-        const t = String(o.org_type ?? o.organization_type ?? "").trim().toLowerCase();
-        return t === "national_sports_association";
+      try {
+        console.info("[sign-up] organisations loaded", {
+          total: or.data.length,
+          sample: or.data.slice(0, 25).map((o) => ({
+            id: o.id,
+            name: organisationDisplayName(o),
+            org_type: o.org_type ?? o.organization_type,
+            org_type_norm: normalizeOrgTypeKey(o.org_type ?? o.organization_type),
+          })),
+        });
+      } catch {
+        // ignore
+      }
+      const nsa = or.data.filter((o) => {
+        const t = normalizeOrgTypeKey(o.org_type ?? o.organization_type);
+        return t === "national_sports_association" || t === "national_sport_association" || t === "nsa";
       });
+      const psl = or.data.filter((o) => {
+        const t = normalizeOrgTypeKey(o.org_type ?? o.organization_type);
+        return t === "psl";
+      });
+      nsaOrganisations.value = nsa;
+      pslOrganisations.value = psl;
+      try {
+        console.info("[sign-up] organisation filter counts", {
+          nsa: nsa.length,
+          psl: psl.length,
+        });
+      } catch {
+        // ignore
+      }
     }
   });
 
@@ -170,7 +199,7 @@ export default component$(() => {
     syncFieldErrors(form, fieldErrors);
     roleFormError.value = "";
 
-    if (!SIGNUP_ROLES.includes(form.role)) {
+    if (!UI_ROLES.includes(form.role)) {
       return;
     }
 
@@ -178,21 +207,11 @@ export default component$(() => {
       return;
     }
 
-    if (form.role === "reviewer") {
+    const track = reviewerTrackFromRole(form.role);
+    if (track) {
       if (!form.organisation_id.trim()) {
-        roleFormError.value = "Select a National Sports Association.";
+        roleFormError.value = track === "psl" ? "Select a PSL organisation." : "Select a National Sports Association.";
         return;
-      }
-      const k = form.approver_body.trim().toUpperCase();
-      if (!k || !(APPROVER_BODY_KINDS as readonly string[]).includes(k)) {
-        roleFormError.value = "Select an approver body type.";
-        return;
-      }
-      if (k === "SPORTS_BODY") {
-        if (!form.sports_body.trim()) {
-          roleFormError.value = "Select a sport body.";
-          return;
-        }
       }
     }
 
@@ -219,8 +238,11 @@ export default component$(() => {
     <>
       <header class="fixed top-0 w-full z-50 bg-emerald-950/70 backdrop-blur-xl shadow-2xl shadow-emerald-950/20">
         <nav class="flex justify-between items-center px-8 py-4 max-w-full">
-          <div class="text-xl font-bold text-white tracking-tighter font-headline">
-            Zimbabwe Sports Travel Authority
+          <div class="flex min-w-0 items-center gap-3">
+            <AppLogo href="/" size="sm" />
+            <div class="text-xl font-bold text-white tracking-tighter font-headline truncate">
+              Zimbabwe Sports Travel Authority
+            </div>
           </div>
 
           <div class="flex items-center gap-4">
@@ -255,6 +277,9 @@ export default component$(() => {
             </div>
 
             <div class="relative z-10">
+              <div class="mb-6">
+                <AppLogo imgClass="max-h-14 sm:max-h-16" size="lg" />
+              </div>
               <span class="text-secondary-fixed font-headline font-bold tracking-widest text-xs uppercase mb-6 block">
                 Official Portal
               </span>
@@ -440,28 +465,30 @@ export default component$(() => {
                       class="w-full rounded-xl border-none bg-surface-container-low p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
                       value={form.role}
                       onChange$={(e) => {
-                        form.role = (e.target as HTMLSelectElement).value as SignUpRole;
-                        if (form.role !== "reviewer") {
+                        const next = (e.target as HTMLSelectElement).value as UiRole;
+                        const prevTrack = reviewerTrackFromRole(form.role);
+                        const nextTrack = reviewerTrackFromRole(next);
+                        form.role = next;
+                        if (!nextTrack || prevTrack !== nextTrack) {
                           form.organisation_id = "";
-                          form.approver_body = "";
-                          form.sports_body = "";
-                          roleFormError.value = "";
                         }
+                        roleFormError.value = "";
                       }}
                       required
                     >
                       <option value="applicant">Applicant</option>
-                      <option value="reviewer">National Sports Association</option>
+                      <option value="reviewer_nsa">National Sports Association</option>
+                      <option value="reviewer_psl">PSL</option>
                       <option value="supervisor">Supervisor</option>
                       <option value="system_admin">System admin</option>
                     </select>
                   </div>
 
-                  {form.role === "reviewer" ? (
+                  {reviewerTrackFromRole(form.role) ? (
                     <>
                       <div class="md:col-span-2">
                         <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                          National Sports Association
+                          {reviewerTrackFromRole(form.role) === "psl" ? "PSL" : "National Sports Association"}
                         </label>
                         <select
                           class="w-full rounded-xl border-none bg-surface-container-low p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
@@ -473,61 +500,16 @@ export default component$(() => {
                           required
                         >
                           <option value="">— Select —</option>
-                          {nsaOrganisations.value.map((o) => (
+                          {(reviewerTrackFromRole(form.role) === "psl"
+                            ? pslOrganisations.value
+                            : nsaOrganisations.value
+                          ).map((o) => (
                             <option key={o.id} value={o.id}>
                               {organisationDisplayName(o) || o.id}
                             </option>
                           ))}
                         </select>
                       </div>
-
-                      <div class="md:col-span-2">
-                        <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                          Approver body type
-                        </label>
-                        <select
-                          class="w-full rounded-xl border-none bg-surface-container-low p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                          value={form.approver_body}
-                          onChange$={(e) => {
-                            form.approver_body = (e.target as HTMLSelectElement).value;
-                            if (form.approver_body !== "SPORTS_BODY") {
-                              form.sports_body = "";
-                            }
-                            roleFormError.value = "";
-                          }}
-                          required
-                        >
-                          <option value="">— Select —</option>
-                          {APPROVER_BODY_KINDS.map((k) => (
-                            <option key={k} value={k}>
-                              {displayApproverBodyKind(k)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      {form.approver_body === "SPORTS_BODY" ? (
-                        <div class="md:col-span-2">
-                          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                            Sport body
-                          </label>
-                          <select
-                            class="w-full rounded-xl border-none bg-surface-container-low p-4 text-on-surface focus:ring-1 focus:ring-primary/30"
-                            value={form.sports_body}
-                            onChange$={(e) => {
-                              form.sports_body = (e.target as HTMLSelectElement).value;
-                              roleFormError.value = "";
-                            }}
-                            required
-                          >
-                            <option value="">— Select —</option>
-                            {sportBodiesForApproverSelect(sportBodies.value).map((b) => (
-                              <option key={b.id} value={sportBodyUserPayloadId(b)}>
-                                {`${b.name ?? sportBodyApprovalCode(b)} (${sportBodyUserPayloadId(b)})`}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ) : null}
                     </>
                   ) : null}
                 </div>
@@ -648,7 +630,12 @@ export default component$(() => {
 
       <footer class="bg-emerald-950 w-full py-12 px-8">
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div class="text-lg font-bold text-white font-headline">Zimbabwe Sports Travel Authority</div>
+          <div class="flex flex-col items-center gap-3 md:flex-row md:items-center">
+            <AppLogo href="/" size="lg" />
+            <div class="text-lg font-bold text-white font-headline text-center md:text-left">
+              Zimbabwe Sports Travel Authority
+            </div>
+          </div>
           <div class="flex flex-wrap justify-center gap-8 font-body text-sm antialiased">
             <a class="text-emerald-200/60 hover:text-amber-400 transition-colors" href="#">
               Privacy Policy

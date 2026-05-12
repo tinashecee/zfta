@@ -1,5 +1,8 @@
 import { getApiBaseUrl, readApiErrorMessage } from "~/lib/api";
 
+/** Dispatched on `window` when the client session is cleared after auth failure (e.g. invalid refresh). */
+export const AUTH_FORCED_SIGNOUT_EVENT = "zfta-auth-forced-signout";
+
 export type UserRole = "applicant" | "reviewer" | "supervisor" | "system_admin";
 
 export type AuthUser = {
@@ -205,9 +208,12 @@ export function persistStoredSessionUser(user: AuthUser): void {
   window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(next));
 }
 
-export function clearSession() {
+export function clearSession(options?: { forced?: boolean }) {
   if (!isBrowser()) return;
   window.localStorage.removeItem(AUTH_SESSION_KEY);
+  if (options?.forced) {
+    window.dispatchEvent(new CustomEvent(AUTH_FORCED_SIGNOUT_EVENT));
+  }
 }
 
 function persistFromBundle(bundle: TokenBundle) {
@@ -229,7 +235,7 @@ async function refreshSession(): Promise<boolean> {
     try {
       const sess = getStoredSession();
       if (!sess?.refresh_token) {
-        clearSession();
+        clearSession({ forced: true });
         return false;
       }
       const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/refresh`, {
@@ -238,14 +244,14 @@ async function refreshSession(): Promise<boolean> {
         body: JSON.stringify({ refresh_token: sess.refresh_token }),
       });
       if (!res.ok) {
-        clearSession();
+        clearSession({ forced: true });
         return false;
       }
       const bundle = (await res.json()) as TokenBundle;
       persistFromBundle(bundle);
       return true;
     } catch {
-      clearSession();
+      clearSession({ forced: true });
       return false;
     } finally {
       refreshInFlight = null;

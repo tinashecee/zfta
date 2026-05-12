@@ -10,11 +10,11 @@ export const USER_ROLES = ["applicant", "reviewer", "supervisor", "system_admin"
 export type UserRole = (typeof USER_ROLES)[number];
 
 /** API enum for reviewer routing — send `sports_body` (sport-body row id as string) when `approver_body` is `SPORTS_BODY`. */
-export const APPROVER_BODY_KINDS = ["SPORTS_BODY", "SRC"] as const;
+export const APPROVER_BODY_KINDS = ["SPORTS_BODY", "SRC", "AFFILIATE"] as const;
 export type ApproverBodyKind = (typeof APPROVER_BODY_KINDS)[number];
 
 /** @deprecated Legacy flat codes; prefer {@link ApproverBodyKind}. */
-export const APPROVER_BODIES = ["ZIFA", "SRC"] as const;
+export const APPROVER_BODIES = ["SRC"] as const;
 export type ApproverBody = (typeof APPROVER_BODIES)[number];
 
 /** @deprecated */
@@ -24,6 +24,7 @@ export function displayApproverBodyKind(kind: string | null | undefined): string
   const k = (kind ?? "").trim().toUpperCase();
   if (k === "SPORTS_BODY") return "Sports body";
   if (k === "SRC") return "SRC";
+  if (k === "AFFILIATE") return "Affiliate";
   if (k === "IMMIGRATION") return "Legacy (no longer supported)";
   return (kind ?? "").trim() || "—";
 }
@@ -59,6 +60,7 @@ export function resolveSportBodyRowForReviewerUser(
   const ab = (user.approver_body ?? "").trim().toUpperCase();
   if (ab === "IMMIGRATION") return undefined;
   if (ab === "SRC") return undefined;
+  if (ab === "AFFILIATE") return undefined;
   if (!ab) {
     const loose = coerceSportsBodyToString(user.sports_body);
     if (loose) {
@@ -113,9 +115,11 @@ export function inferApproverFormFromUser(
     return { kind: "SPORTS_BODY", sportsBodyCode: "" };
   }
   if (ab === "SRC") return { kind: "SRC", sportsBodyCode: "" };
+  if (ab === "AFFILIATE") return { kind: "AFFILIATE", sportsBodyCode: "" };
   if (ab === "IMMIGRATION") return { kind: "", sportsBodyCode: "" };
 
   const legacy = (u.body ?? "").trim().toUpperCase();
+  if (legacy === "AFFILIATE") return { kind: "AFFILIATE", sportsBodyCode: "" };
   if (legacy === "SRC") return { kind: "SRC", sportsBodyCode: "" };
   if (legacy === "IMMIGRATION") return { kind: "", sportsBodyCode: "" };
   if (u.sport_body_id != null && u.sport_body_id > 0) {

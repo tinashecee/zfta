@@ -1,4 +1,5 @@
 import { $, component$, useSignal } from "@builder.io/qwik";
+import { AppLogo } from "~/components/app-logo";
 import { signOut } from "~/lib/auth";
 
 type NavItemKey = "dashboard" | "applications" | "calendar" | "organization" | "settings";
@@ -69,12 +70,13 @@ export const ApplicantPortalNav = component$<ApplicantPortalNavProps>(({ activeI
             menu
           </button>
 
-          <span class="text-lg font-bold tracking-tighter text-emerald-50 uppercase font-headline hidden md:inline">
-            Zimbabwe Sports Travel Authority
-          </span>
-          <span class="text-lg font-bold tracking-tighter text-emerald-50 uppercase font-headline md:hidden">
-            ZSTA
-          </span>
+          <div class="flex min-w-0 items-center gap-3">
+            <AppLogo class="shrink-0" href="/applicant/dashboard/" size="sm" />
+            <span class="text-lg font-bold tracking-tighter text-emerald-50 uppercase font-headline hidden md:inline truncate">
+              Zimbabwe Sports Travel Authority
+            </span>
+            <span class="text-lg font-bold tracking-tighter text-emerald-50 uppercase font-headline md:hidden">ZSTA</span>
+          </div>
         </div>
 
         <div class="flex items-center gap-4">
@@ -132,9 +134,12 @@ export const ApplicantPortalNav = component$<ApplicantPortalNavProps>(({ activeI
               </button>
             </div>
 
-            <div class="flex flex-col">
-              <span class="text-2xl font-black text-emerald-50 uppercase tracking-widest">ZSTA Portal</span>
-              <span class="text-emerald-100/60 text-xs font-bold mt-1">Diplomatic Pitch</span>
+            <div class="flex flex-col gap-3">
+              <AppLogo href="/applicant/dashboard/" size="md" />
+              <div>
+                <span class="text-lg font-black text-emerald-50 uppercase tracking-widest">ZSTA Portal</span>
+                <span class="text-emerald-100/60 text-xs font-bold mt-1 block">Diplomatic Pitch</span>
+              </div>
             </div>
 
             <div class="flex flex-col gap-2">

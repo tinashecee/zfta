@@ -10,6 +10,8 @@ type ApproverNavItemKey =
   | "pendingQueue"
   | "approved"
   | "archived"
+  | "biddingEvents"
+  | "myBids"
   | "systemLogs"
   | "account";
 
@@ -31,6 +33,8 @@ const NAV_ITEMS: Array<{
   { key: "pendingQueue", label: "Pending Queue", icon: "pending_actions", href: "/approver/dashboard/" },
   { key: "approved", label: "Approved", icon: "verified_user", href: "/approver/dashboard/?status=approved", filled: true },
   { key: "archived", label: "Archived", icon: "archive", href: "/approver/dashboard/?status=historical" },
+  { key: "biddingEvents", label: "Bidding events", icon: "emoji_events", href: "/approver/bidding-events/" },
+  { key: "myBids", label: "My bids", icon: "assignment_turned_in", href: "/approver/my-bids/" },
   { key: "systemLogs", label: "System Logs", icon: "settings_suggest", href: "#" },
   { key: "account", label: "My account", icon: "manage_accounts", href: "/approver/account/" },
 ];
@@ -168,7 +172,7 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
             event.stopPropagation();
           }}
         >
-          <nav class="w-full h-full min-h-screen bg-emerald-950 py-8 px-6 flex flex-col text-white overflow-y-auto">
+          <nav class="w-full h-full min-h-screen bg-emerald-950 py-8 px-6 flex flex-col text-white overflow-hidden">
             <div class="flex items-center justify-between mb-10">
               <div>
                 <h1 class="text-lg font-black text-white uppercase tracking-tighter">Travel Authority</h1>
@@ -190,7 +194,7 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
               </button>
             </div>
 
-            <div class="flex-1 space-y-2">
+            <div class="flex-1 space-y-2 overflow-y-auto pr-1">
               {NAV_ITEMS.filter((i) => {
                 if (i.key === "createApplication") return showSportBodyCreate.value;
                 if (i.key === "myApplications") return showMyApplications.value;

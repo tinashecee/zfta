@@ -38,7 +38,7 @@ function sportLabel(value: string): string {
 
 const SPORT_OPTIONS = SPORT_VALUES.map((v) => ({ value: v, label: sportLabel(v) }));
 
-type OrgRow = ApiOrganisation & { _name: string; _type: string; _sport: string; _status: string };
+type OrgRow = ApiOrganisation & { _name: string; _type: string; _sport: string };
 
 function norm(s: string | null | undefined): string {
   return (s ?? "").trim();
@@ -169,7 +169,6 @@ export default component$(() => {
         _name: organisationDisplayName(o),
         _type: orgType(o),
         _sport: norm(o.sport),
-        _status: norm(o.status),
       });
     }
   });
@@ -188,7 +187,6 @@ export default component$(() => {
         r._name,
         r._type,
         r._sport,
-        r._status,
         norm(r.id),
       ]
         .join(" ")
@@ -333,7 +331,7 @@ export default component$(() => {
               </span>
               <input
                 class="w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest py-2.5 pl-10 pr-4 text-sm focus:ring-1 focus:ring-primary/30"
-                placeholder="Search by name, type, sport, status, or id…"
+                placeholder="Search by name, type, sport, or id…"
                 value={query.value}
                 onInput$={(e) => {
                   query.value = (e.target as HTMLInputElement).value;
@@ -359,13 +357,12 @@ export default component$(() => {
             </div>
           ) : (
             <div class="overflow-x-auto rounded-2xl border border-outline-variant/20 bg-surface-container-lowest shadow-sm">
-              <table class="w-full min-w-[900px] border-collapse text-left text-sm">
+              <table class="w-full min-w-[760px] border-collapse text-left text-sm">
                 <thead class="bg-surface-container-low">
                   <tr>
                     <th class="px-4 py-3 text-[10px] uppercase tracking-widest font-bold text-outline">Name</th>
                     <th class="px-4 py-3 text-[10px] uppercase tracking-widest font-bold text-outline">Type</th>
                     <th class="px-4 py-3 text-[10px] uppercase tracking-widest font-bold text-outline">Sport</th>
-                    <th class="px-4 py-3 text-[10px] uppercase tracking-widest font-bold text-outline">Status</th>
                     <th class="px-4 py-3 text-[10px] uppercase tracking-widest font-bold text-outline">Created</th>
                     <th class="px-4 py-3 text-[10px] uppercase tracking-widest font-bold text-outline text-right">Action</th>
                   </tr>
@@ -381,7 +378,6 @@ export default component$(() => {
                       </td>
                       <td class="px-4 py-3 text-on-surface-variant">{o._type || "—"}</td>
                       <td class="px-4 py-3 text-on-surface-variant">{o._sport || "—"}</td>
-                      <td class="px-4 py-3 text-on-surface-variant">{o._status || "—"}</td>
                       <td class="px-4 py-3 text-on-surface-variant">
                         {(o.created_at ?? "").slice(0, 10) || "—"}
                       </td>

@@ -20,6 +20,7 @@ import { listZimbabweSports } from "~/lib/zimbabwe-sports-api";
 
 type DashboardStatus =
   | "awaitingReview"
+  | "awaitingPsl"
   | "underReview"
   | "infoRequested"
   | "awaitingInformation"
@@ -42,7 +43,7 @@ type ApplicationRecord = {
   ageGroup: string;
   queueEntry: string;
   status: DashboardStatus;
-  /** When true, SRC reviewer may OPEN (ZIFA latest approved). Only meaningful for SRC users. */
+  /** When true, SRC reviewer may OPEN (primary sport body latest approved). Only meaningful for SRC users. */
   srcOpenEligible?: boolean;
   overdue?: boolean;
   assignee?: {
@@ -56,6 +57,9 @@ type ApplicationRecord = {
 
 function apiStatusToDashboard(status: string | undefined): DashboardStatus {
   const s = (status ?? "").toLowerCase();
+  if (s === "awaiting_psl" || s === "awaiting_affiliate") {
+    return "awaitingPsl";
+  }
   if (
     s === "awaiting_body" ||
     s === "awaiting_zifa" ||
@@ -74,7 +78,7 @@ function apiStatusToDashboard(status: string | undefined): DashboardStatus {
   if (s === "approved" || s === "certificate_issued") return "approved";
   if (s === "rejected") return "rejected";
   if (s) {
-    console.warn("[approver-dashboard] unknown API status, mapping to Awaiting ZIFA until handled", {
+    console.warn("[approver-dashboard] unknown API status, mapping to Awaiting sport body until handled", {
       raw: status,
     });
   }
@@ -84,6 +88,7 @@ function apiStatusToDashboard(status: string | undefined): DashboardStatus {
 const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "Status: All" },
   { value: "awaitingReview", label: "Awaiting sport body" },
+  { value: "awaitingPsl", label: "Awaiting PSL" },
   { value: "underReview", label: "Awaiting SRC" },
   { value: "infoRequested", label: "Info Requested" },
   { value: "awaitingInformation", label: "Awaiting Information" },
@@ -98,13 +103,16 @@ const HISTORICAL_STATUSES: DashboardStatus[] = ["approved", "rejected"];
 /** Default queue filter when the URL has no `?status=` (or an invalid value). */
 function defaultStatusFilterForReviewerBody(body: ApproverBody): StatusFilter {
   if (body === "SRC") return "underReview";
+  if (body === "AFFILIATE") return "awaitingPsl";
   return "awaitingReview";
 }
 
 function resolveStatusFilterFromUrl(urlStatus: string | null, body: ApproverBody): StatusFilter {
+  if (urlStatus === "awaitingAffiliate") return "awaitingPsl";
   if (urlStatus === "all") return "all";
   if (
     urlStatus === "awaitingReview" ||
+    urlStatus === "awaitingPsl" ||
     urlStatus === "underReview" ||
     urlStatus === "infoRequested" ||
     urlStatus === "awaitingInformation" ||
@@ -175,12 +183,18 @@ const getStatusPillClasses = (status: DashboardStatus) => {
   if (status === "underReview") {
     return "bg-surface-container-highest text-on-surface-variant";
   }
+  if (status === "awaitingPsl") {
+    return "bg-primary/10 text-primary";
+  }
   return "bg-tertiary/10 text-tertiary";
 };
 
 const getStatusLabel = (status: DashboardStatus, rawApiStatus?: string) => {
   if (status === "awaitingReview") {
     return "Awaiting sport body";
+  }
+  if (status === "awaitingPsl") {
+    return "Awaiting PSL";
   }
   if (status === "underReview") {
     return "Awaiting SRC";
@@ -205,10 +219,19 @@ const getActionHref = (application: ApplicationRecord) =>
     ? `/approver/historical/?id=${application.id}&result=${application.status}`
     : `/approver/processing/?id=${application.id}`;
 
+function rawApiStatusIsPslPhase(raw: string | undefined): boolean {
+  const s = (raw ?? "").trim().toLowerCase();
+  return s === "awaiting_psl" || s === "awaiting_affiliate";
+}
+
 function isApproverActionable(application: ApplicationRecord, body: ApproverBody): boolean {
   if (body === "SRC") {
     return application.status === "underReview" && application.srcOpenEligible === true;
   }
+  if (body === "AFFILIATE") {
+    return application.status === "awaitingPsl";
+  }
+  if (rawApiStatusIsPslPhase(application.apiStatusRaw)) return false;
   return application.status === "awaitingReview";
 }
 
@@ -320,8 +343,15 @@ export default component$(() => {
       const orgRow = orgId ? orgRows.get(orgId) : undefined;
       const routeSport = routingSportForApplication(app.sport, orgRow?.sport);
       if (body && body !== "SRC") {
-        const primary = resolvePrimaryBodyFromOrgSport(routeSport, zs, sb);
-        if (!reviewerPrimaryCodesEqual(primary.code, body)) continue;
+        if (body === "AFFILIATE") {
+          const raw = (app.status ?? "").trim().toLowerCase();
+          if (raw !== "awaiting_psl" && raw !== "awaiting_affiliate") continue;
+        } else {
+          const rawAssigned = (app.status ?? "").trim().toLowerCase();
+          if (rawAssigned === "awaiting_psl" || rawAssigned === "awaiting_affiliate") continue;
+          const primary = resolvePrimaryBodyFromOrgSport(routeSport, zs, sb);
+          if (!reviewerPrimaryCodesEqual(primary.code, body)) continue;
+        }
       }
       const st = apiStatusToDashboard(app.status);
       applications.push({
@@ -378,6 +408,26 @@ export default component$(() => {
               <div class="flex items-baseline gap-2">
                 <p class="text-3xl font-headline font-extrabold text-primary">{countForFilter(applications, "awaitingReview")}</p>
                 {countForFilter(applications, "awaitingReview") > 0 ? (
+                  <span class="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded">
+                    NEW
+                  </span>
+                ) : null}
+              </div>
+            </button>
+            <button
+              class={getSummaryCardClasses(
+                selectedStatus.value === "awaitingPsl",
+                "border-b-2 border-emerald-900/10",
+              )}
+              type="button"
+              onClick$={() => {
+                selectedStatus.value = "awaitingPsl";
+              }}
+            >
+              <p class="text-[10px] uppercase tracking-widest font-bold text-outline mb-1">Awaiting affiliate</p>
+              <div class="flex items-baseline gap-2">
+                <p class="text-3xl font-headline font-extrabold text-primary">{countForFilter(applications, "awaitingPsl")}</p>
+                {countForFilter(applications, "awaitingPsl") > 0 ? (
                   <span class="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded">
                     NEW
                   </span>

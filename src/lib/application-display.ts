@@ -12,7 +12,10 @@
  * **Governance check** — For the primary sport body and SRC we take the **latest** approval whose
  * `body` matches that stakeholder (substring match, case-insensitive). That row’s `status`
  * drives the pill. Bodies with no matching row show **pending**. If the approvals list is empty,
- * both are **pending** and completion is 0%.
+ * all shown bodies are **pending** and completion is 0%.
+ *
+ * When **`pslAffiliate`** is true on the options object, a first row **PSL (Sports Affiliate)** is
+ * shown, matched to approval rows whose body is **AFFILIATE**; completion uses all visible rows.
  */
 import type { ApiApproval } from "~/lib/approvals-api";
 
@@ -72,6 +75,7 @@ export function applicantFacingStatusLabel(status: string | undefined): string {
   ) {
     return "Awaiting sport body review";
   }
+  if (s === "awaiting_psl" || s === "awaiting_affiliate") return "Awaiting PSL review";
   if (s === "awaiting_src" || s === "under_review") return "Awaiting SRC";
   if (s === "awaiting_information") return "Awaiting information";
   if (s === "awaiting_immigration") return "Processing"; // legacy API status — immigration stage removed
@@ -93,9 +97,8 @@ function ts(iso?: string | null): number {
 
 const SRC_GOVERNANCE_SUBTITLE = "Sports Commission";
 
-function matchBodyKey(body: string | null | undefined): "ZIFA" | "SRC" | null {
+function matchBodyKey(body: string | null | undefined): "SRC" | null {
   const s = (body ?? "").toUpperCase();
-  if (s.includes("ZIFA")) return "ZIFA";
   if (s.includes("SRC")) return "SRC";
   return null;
 }
@@ -125,15 +128,26 @@ function approvalTimelineVariant(a: ApiApproval): TimelineItem["variant"] {
   return "success";
 }
 
-function governanceAllPending(primary: { code: string; label: string }): {
+export type GovernanceFromApprovalsOptions = {
+  pslAffiliate?: boolean;
+};
+
+function governanceAllPending(
+  primary: { code: string; label: string },
+  pslAffiliate?: boolean,
+): {
   rows: GovernanceStake[];
   completion: number;
 } {
   const p = primary;
-  const rows: GovernanceStake[] = [
+  const rows: GovernanceStake[] = [];
+  if (pslAffiliate) {
+    rows.push({ name: "PSL", subtitle: "Sports Affiliate", state: "pending" });
+  }
+  rows.push(
     { name: p.label, subtitle: "Sport federation", state: "pending" },
     { name: "SRC", subtitle: SRC_GOVERNANCE_SUBTITLE, state: "pending" },
-  ];
+  );
   return { rows, completion: 0 };
 }
 
@@ -152,8 +166,8 @@ function approvalMatchesBodyCode(a: ApiApproval, bodyCode: string): boolean {
   const got = (a.body ?? "").trim().toUpperCase();
   if (!got) return false;
   // If the API only stores the enum `SPORT_BODY` without a `body_code`,
-  // allow it to satisfy the primary sport-body stake.
-  if (got === "SPORT_BODY" && want !== "SRC") return true;
+  // allow it to satisfy the primary sport-body stake (not AFFILIATE or SRC).
+  if (got === "SPORT_BODY" && want !== "SRC" && want !== "AFFILIATE") return true;
   if (got === want) return true;
   if (got.includes(want) || want.includes(got)) return true;
   return false;
@@ -161,36 +175,42 @@ function approvalMatchesBodyCode(a: ApiApproval, bodyCode: string): boolean {
 
 /**
  * Governance from approval rows; empty list ⇒ all bodies pending.
- * First column is the sport-specific body (`primary`), then SRC.
+ * Order: optional PSL (AFFILIATE), sport-specific body (`primary`), then SRC.
  */
 export function governanceFromApprovals(
   _applicationStatus: string | undefined,
   approvals: ApiApproval[] | null | undefined,
   primary?: { code: string; label: string },
+  options?: GovernanceFromApprovalsOptions,
 ): { rows: GovernanceStake[]; completion: number } {
-  const p = primary ?? { code: "ZIFA", label: "ZIFA" };
+  const p = primary ?? { code: "SPORT_BODY", label: "Sport body" };
+  const pslAffiliate = options?.pslAffiliate === true;
   if (!approvals?.length) {
-    return governanceAllPending(p);
+    return governanceAllPending(p, pslAffiliate);
   }
 
-  const pair: Array<{ code: string; label: string; subtitle: string }> = [
+  const stakes: Array<{ code: string; label: string; subtitle: string }> = [];
+  if (pslAffiliate) {
+    stakes.push({ code: "AFFILIATE", label: "PSL", subtitle: "Sports Affiliate" });
+  }
+  stakes.push(
     { code: p.code, label: p.label, subtitle: "Sport federation" },
     { code: "SRC", label: "SRC", subtitle: SRC_GOVERNANCE_SUBTITLE },
-  ];
+  );
 
   const sorted = [...approvals].sort(
     (a, b) => ts(approvalActivityInstantIso(b)) - ts(approvalActivityInstantIso(a)),
   );
   const latest = new Map<string, ApiApproval>();
   for (const a of sorted) {
-    for (const t of pair) {
+    for (const t of stakes) {
       if (approvalMatchesBodyCode(a, t.code) && !latest.has(t.code)) {
         latest.set(t.code, a);
       }
     }
   }
 
-  const rows: GovernanceStake[] = pair.map((t) => {
+  const rows: GovernanceStake[] = stakes.map((t) => {
     const ap = latest.get(t.code);
     return {
       name: t.label,
@@ -199,8 +219,9 @@ export function governanceFromApprovals(
     };
   });
 
+  const denom = rows.length || 1;
   const approvedCount = rows.filter((r) => r.state === "approved").length;
-  const completion = Math.min(100, Math.round((approvedCount / 2) * 100));
+  const completion = Math.min(100, Math.round((approvedCount / denom) * 100));
   return { rows, completion };
 }
 

@@ -226,6 +226,8 @@ type OrgForm = {
   emergencyContactName: string;
   emergencyContactMobile: string;
   emergencyContactRelation: string;
+  /** Football only. False by default. */
+  pslAffiliate: boolean;
   status: string;
   certified: boolean;
 };
@@ -256,12 +258,17 @@ function emptyForm(): OrgForm {
     emergencyContactName: "",
     emergencyContactMobile: "",
     emergencyContactRelation: "",
+    pslAffiliate: false,
     status: "incomplete",
     certified: false,
   };
 }
 
 function mapOrgToForm(o: ApiOrganisation): OrgForm {
+  const psl = (() => {
+    const raw = o.psl_affiliate ?? o.pslAffiliate ?? o.PslAffiliate;
+    return typeof raw === "boolean" ? raw : ynToBool(raw as unknown as string | boolean | null | undefined);
+  })();
   return {
     orgName: organisationDisplayName(o),
     orgType: normalizeOrgType(o.org_type ?? o.organization_type),
@@ -289,6 +296,7 @@ function mapOrgToForm(o: ApiOrganisation): OrgForm {
     emergencyContactName: o.emergency_contact_name ?? "",
     emergencyContactMobile: o.emergency_contact_mobile ?? "",
     emergencyContactRelation: o.emergency_contact_relation ?? "",
+    pslAffiliate: psl,
     status: ORG_STATUSES.includes(o.status as (typeof ORG_STATUSES)[number])
       ? o.status!
       : "incomplete",
@@ -353,6 +361,7 @@ function formToPayload(form: OrgForm): Record<string, unknown> {
     payload.emergency_contact_relation = form.emergencyContactRelation.trim();
   }
   payload.sport = form.sport.trim();
+  payload.psl_affiliate = form.sport.trim() === "football" ? form.pslAffiliate : false;
   return payload;
 }
 
@@ -585,7 +594,9 @@ export default component$(() => {
                     value={form.sport}
                     required
                     onChange$={(e) => {
-                      form.sport = (e.target as HTMLSelectElement).value;
+                      const next = (e.target as HTMLSelectElement).value;
+                      form.sport = next;
+                      if (next !== "football") form.pslAffiliate = false;
                     }}
                   >
                     <option value="" disabled>
@@ -599,6 +610,45 @@ export default component$(() => {
                   </select>
                 </div>
               </div>
+
+              {form.sport === "football" ? (
+                <div class="bg-surface-container-lowest p-6 sm:p-8 rounded-xl shadow-sm border border-outline-variant/15">
+                  <h3 class="font-headline font-bold text-xl text-primary mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined">sports_soccer</span> Football affiliation
+                  </h3>
+                  <div class="flex flex-col gap-2">
+                    <p class="text-sm text-on-surface-variant">
+                      Is this organisation a PSL affiliate?
+                    </p>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                      <label class="flex cursor-pointer items-center gap-3 rounded-lg bg-surface-container-low p-3">
+                        <input
+                          type="radio"
+                          name="pslAffiliate"
+                          value="yes"
+                          checked={form.pslAffiliate === true}
+                          onChange$={() => {
+                            form.pslAffiliate = true;
+                          }}
+                        />
+                        <span class="text-sm font-semibold text-primary">Yes</span>
+                      </label>
+                      <label class="flex cursor-pointer items-center gap-3 rounded-lg bg-surface-container-low p-3">
+                        <input
+                          type="radio"
+                          name="pslAffiliate"
+                          value="no"
+                          checked={form.pslAffiliate === false}
+                          onChange$={() => {
+                            form.pslAffiliate = false;
+                          }}
+                        />
+                        <span class="text-sm font-semibold text-primary">No</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div class="md:col-span-2 bg-surface-container-lowest p-8 rounded-xl shadow-sm border border-outline-variant/15">

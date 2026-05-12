@@ -56,6 +56,7 @@ function stakeLabel(s: GovernanceStake["state"]): string {
 function governanceIconName(row: GovernanceStake): string {
   if (row.state === "rejected") return "cancel";
   if (row.name === "SRC") return "info";
+  if (row.name === "PSL") return "handshake";
   return "verified_user";
 }
 
@@ -69,7 +70,8 @@ export default component$(() => {
   const approvalsLoadError = useSignal<string | null>(null);
   const organisationName = useSignal<string>("");
   const organisationSport = useSignal<string>("");
-  const primaryStake = useSignal<{ code: string; label: string }>({ code: "ZIFA", label: "ZIFA" });
+  const organisationPslAffiliate = useSignal(false);
+  const primaryStake = useSignal<{ code: string; label: string }>({ code: "SPORT_BODY", label: "Sport body" });
   const personnel = useStore<TravelPersonnelRow[]>([]);
 
   const certPhase = useSignal<CertPhase>("skip");
@@ -88,7 +90,8 @@ export default component$(() => {
     approvalsLoadError.value = null;
     organisationName.value = "";
     organisationSport.value = "";
-    primaryStake.value = { code: "ZIFA", label: "ZIFA" };
+    organisationPslAffiliate.value = false;
+    primaryStake.value = { code: "SPORT_BODY", label: "Sport body" };
     certPhase.value = "skip";
     certData.value = null;
     certGenerateError.value = null;
@@ -118,6 +121,9 @@ export default component$(() => {
         const sp = orgR.data.sport;
         organisationSport.value =
           sp != null && String(sp).trim() !== "" ? String(sp).trim() : "";
+        organisationPslAffiliate.value = Boolean(
+          orgR.data.psl_affiliate ?? orgR.data.pslAffiliate ?? orgR.data.PslAffiliate,
+        );
       }
     }
 
@@ -154,7 +160,11 @@ export default component$(() => {
   });
 
   const app = application.value;
-  const governance = app ? governanceFromApprovals(app.status, approvals.value, primaryStake.value) : null;
+  const governance = app
+    ? governanceFromApprovals(app.status, approvals.value, primaryStake.value, {
+        pslAffiliate: organisationPslAffiliate.value,
+      })
+    : null;
 
   return (
     <div class="bg-background font-body text-on-surface min-h-screen">
@@ -344,8 +354,8 @@ export default component$(() => {
                   </div>
                   <h2 class="text-2xl font-bold font-headline mb-6 relative z-10">Governance check</h2>
                   <div class="space-y-6 relative z-10">
-                    {(governance?.rows ?? []).map((row) => (
-                      <div key={row.name} class="flex items-center justify-between gap-3">
+                    {(governance?.rows ?? []).map((row, idx) => (
+                      <div key={`${row.name}-${row.subtitle}-${idx}`} class="flex items-center justify-between gap-3">
                         <div class="flex items-center gap-4 min-w-0">
                           <div
                             class={[

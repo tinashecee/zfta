@@ -1,4 +1,5 @@
-import { $, component$, useSignal } from "@builder.io/qwik";
+/* eslint-disable qwik/valid-lexical-scope */
+import { $, component$, noSerialize, useSignal } from "@builder.io/qwik";
 import type { Signal } from "@builder.io/qwik";
 
 function buildAccept(allowPdf: boolean, allowDoc: boolean, allowXls: boolean, allowImages: boolean): string {
@@ -68,7 +69,8 @@ export const AttachmentField = component$<AttachmentFieldProps>((props) => {
       props.file.value = null;
       return;
     }
-    props.file.value = f;
+    // File objects are not serializable; store as noSerialize for Qwik.
+    props.file.value = noSerialize(f) as unknown as File;
   });
 
   return (

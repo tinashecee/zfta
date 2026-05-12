@@ -1,5 +1,6 @@
 import { component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
+import { AppLogo } from "~/components/app-logo";
 export default component$(() => {
   const email = useSignal<string | null>(null);
   const sent = useSignal(false);
@@ -19,8 +20,11 @@ export default component$(() => {
       {/* TopNavBar */}
       <nav class="bg-primary/95 dark:bg-[#001a0c] docked full-width top-0 z-50 shadow-[0_4px_30px_rgba(0,0,0,0.1)] no-border tonal-shift bg-opacity-95 backdrop-blur-md">
         <div class="flex justify-between items-center w-full px-6 py-4 max-w-7xl mx-auto">
-          <div class="text-lg font-extrabold tracking-tighter text-white uppercase font-headline">
-            Zimbabwe Sports Travel Authority
+          <div class="flex min-w-0 items-center gap-3">
+            <AppLogo href="/" size="sm" />
+            <div class="text-lg font-extrabold tracking-tighter text-white uppercase font-headline truncate">
+              Zimbabwe Sports Travel Authority
+            </div>
           </div>
 
           <div class="flex items-center gap-4">
@@ -102,7 +106,12 @@ export default component$(() => {
       {/* Footer */}
       <footer class="bg-emerald-950 w-full py-12 px-8">
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div class="text-lg font-bold text-white font-headline">Zimbabwe Sports Travel Authority</div>
+          <div class="flex flex-col items-center gap-3 md:flex-row md:items-center">
+            <AppLogo href="/" size="lg" />
+            <div class="text-lg font-bold text-white font-headline text-center md:text-left">
+              Zimbabwe Sports Travel Authority
+            </div>
+          </div>
           <div class="flex flex-wrap justify-center gap-8 font-body text-sm antialiased">
             <a class="text-emerald-200/60 hover:text-amber-400 transition-colors" href="#">
               Privacy Policy
