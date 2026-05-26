@@ -628,6 +628,24 @@ export function biddingEventStatusLabel(status: string | null | undefined): stri
   return status?.replace(/_/g, " ") || "—";
 }
 
+export function isHostingEventOpenForBids(status: string | null | undefined): boolean {
+  return (status ?? "").trim().toLowerCase().replace(/-/g, "_") === "open_for_bids";
+}
+
+export function isHostingEventClosedForBids(status: string | null | undefined): boolean {
+  const s = (status ?? "").trim().toLowerCase().replace(/-/g, "_");
+  return s === "closed" || s === "awarded";
+}
+
+export function filterHostingEventsByBidWindowTab(
+  events: ApiBiddingEvent[],
+  tab: "open" | "closed",
+): ApiBiddingEvent[] {
+  return events.filter((ev) =>
+    tab === "open" ? isHostingEventOpenForBids(ev.status) : isHostingEventClosedForBids(ev.status),
+  );
+}
+
 export function bidStatusLabel(status: string | null | undefined): string {
   const s = (status ?? "").trim().toLowerCase().replace(/-/g, "_");
   if (s === "draft") return "Draft";
@@ -639,14 +657,10 @@ export function bidStatusLabel(status: string | null | undefined): string {
   return status?.replace(/_/g, " ") || "—";
 }
 
-/** Sport-body reviewer or system admin — `/approver/bidding-events/*` browse + apply. */
-export function userCanBrowseApproverHostingPages(
-  user: { role: string; body?: string | null; approver_body?: string | null } | null,
-): boolean {
-  if (!user) return false;
-  if (user.role === "system_admin") return true;
-  if (user.role !== "reviewer") return false;
-  const ab = (user.approver_body ?? "").trim().toUpperCase();
-  const legacy = (user.body ?? "").trim().toUpperCase();
-  return ab === "SPORTS_BODY" || legacy === "SPORT_BODY" || legacy === "SPORTS_BODY";
-}
+export {
+  isSportBodyReviewerSession,
+  isSrcReviewerSession,
+  userCanBidOnHostingOpportunities,
+  userCanBrowseApproverHostingPages,
+  userCanManageHostingEvents,
+} from "~/lib/hosting-access";

@@ -14,12 +14,16 @@ import {
   submitHostingBid,
   uploadHostingBidDocument,
   uploadedBidDocumentTypes,
-  userCanBrowseApproverHostingPages,
   type ApiBidDocument,
   type BidWorkspacePayload,
 } from "~/lib/bidding-api";
 import { formatDateTime } from "~/lib/application-display";
 import { getCurrentUser } from "~/lib/auth";
+import {
+  isSportBodyReviewerSession,
+  isSrcReviewerSession,
+  redirectPathIfNoHostingBidAccess,
+} from "~/lib/hosting-access";
 import { resolveCurrentReviewerSportBodyContext } from "~/lib/reviewer-sport-body";
 
 export default component$(() => {
@@ -75,8 +79,13 @@ export default component$(() => {
     workspace.value = null;
 
     const u = getCurrentUser();
-    if (!userCanBrowseApproverHostingPages(u)) {
-      window.location.assign(u?.role === "system_admin" ? "/admin/dashboard/" : "/approver/dashboard/");
+    if (isSrcReviewerSession(u)) {
+      window.location.assign("/approver/submitted-bids/");
+      return;
+    }
+    const denied = redirectPathIfNoHostingBidAccess(u);
+    if (denied) {
+      window.location.assign(denied);
       return;
     }
     if (!bidId) {
@@ -92,29 +101,22 @@ export default component$(() => {
       return;
     }
 
-    if (u?.role !== "system_admin") {
-      const ab = (u?.approver_body ?? "").trim().toUpperCase();
-      const legacy = (u?.body ?? "").trim().toUpperCase();
-      const isSportBody =
-        u?.role === "reviewer" &&
-        (ab === "SPORTS_BODY" || legacy === "SPORT_BODY" || legacy === "SPORTS_BODY");
-      if (isSportBody) {
-        const ctx = await resolveCurrentReviewerSportBodyContext();
-        if (!ctx.ok) {
-          loadError.value = ctx.error;
-          return;
-        }
-        const er = await listBiddingEvents({ limit: 100, offset: 0 });
-        if (!er.ok) {
-          loadError.value = er.error;
-          return;
-        }
-        const { allowedEventIds } = filterHostingEventsForSportBodyReviewer(er.data, ctx.sportKey);
-        const eid = String(ws.data.bid.event_id ?? "").trim();
-        if (!eid || !allowedEventIds.has(eid)) {
-          window.location.assign("/approver/dashboard/");
-          return;
-        }
+    if (u?.role !== "system_admin" && isSportBodyReviewerSession(u)) {
+      const ctx = await resolveCurrentReviewerSportBodyContext();
+      if (!ctx.ok) {
+        loadError.value = ctx.error;
+        return;
+      }
+      const er = await listBiddingEvents({ limit: 100, offset: 0 });
+      if (!er.ok) {
+        loadError.value = er.error;
+        return;
+      }
+      const { allowedEventIds } = filterHostingEventsForSportBodyReviewer(er.data, ctx.sportKey);
+      const eid = String(ws.data.bid.event_id ?? "").trim();
+      if (!eid || !allowedEventIds.has(eid)) {
+        window.location.assign("/approver/my-bids/");
+        return;
       }
     }
 

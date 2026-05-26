@@ -9,12 +9,16 @@ import {
   getHostingEvent,
   hostingEventSportMatchesCatalogKey,
   isHostingBidDeadlineOpen,
-  userCanBrowseApproverHostingPages,
   type ApiBid,
   type ApiBiddingEvent,
 } from "~/lib/bidding-api";
 import { formatDateTime, formatIsoDate } from "~/lib/application-display";
 import { getCurrentUser } from "~/lib/auth";
+import {
+  isSportBodyReviewerSession,
+  isSrcReviewerSession,
+  redirectPathIfNoHostingBidAccess,
+} from "~/lib/hosting-access";
 import { getOrganisation, organisationDisplayName } from "~/lib/organisations-api";
 import { resolveCurrentReviewerSportBodyContext } from "~/lib/reviewer-sport-body";
 
@@ -37,8 +41,13 @@ export default component$(() => {
     const eventId = location.params.eventId?.trim() ?? "";
     const u = getCurrentUser();
     sessionRole.value = u?.role ?? null;
-    if (!userCanBrowseApproverHostingPages(u)) {
-      window.location.assign(u?.role === "system_admin" ? "/admin/dashboard/" : "/approver/dashboard/");
+    if (isSrcReviewerSession(u)) {
+      window.location.assign("/approver/hosting-events/");
+      return;
+    }
+    const denied = redirectPathIfNoHostingBidAccess(u);
+    if (denied) {
+      window.location.assign(denied);
       return;
     }
     if (!eventId) {
@@ -54,20 +63,14 @@ export default component$(() => {
     existingBid.value = null;
     reviewerSportKey.value = null;
 
-    if (u?.role !== "system_admin") {
-      const ab = (u?.approver_body ?? "").trim().toUpperCase();
-      const legacy = (u?.body ?? "").trim().toUpperCase();
-      const isSportBody =
-        u?.role === "reviewer" && (ab === "SPORTS_BODY" || legacy === "SPORT_BODY" || legacy === "SPORTS_BODY");
-      if (isSportBody) {
-        const ctx = await resolveCurrentReviewerSportBodyContext();
-        if (!ctx.ok) {
-          loading.value = false;
-          loadError.value = ctx.error;
-          return;
-        }
-        reviewerSportKey.value = ctx.sportKey;
+    if (u?.role !== "system_admin" && isSportBodyReviewerSession(u)) {
+      const ctx = await resolveCurrentReviewerSportBodyContext();
+      if (!ctx.ok) {
+        loading.value = false;
+        loadError.value = ctx.error;
+        return;
       }
+      reviewerSportKey.value = ctx.sportKey;
     }
 
     const gr = await getHostingEvent(eventId);

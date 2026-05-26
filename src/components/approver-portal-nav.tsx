@@ -1,11 +1,14 @@
 import { $, component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
 import { getCurrentUser, signOut } from "~/lib/auth";
+import { isSportBodyReviewerSession, isSrcReviewerSession } from "~/lib/hosting-access";
 import { resolveSportBodyRowForReviewerUser, reviewerPortalAffiliationLabel } from "~/lib/users-api";
 import { listSportBodies, sportBodyApprovalCode } from "~/lib/sport-bodies-api";
 
 type ApproverNavItemKey =
   | "dashboard"
   | "myApplications"
+  | "hostingEventsManage"
+  | "submittedBids"
   | "createApplication"
   | "pendingQueue"
   | "approved"
@@ -33,6 +36,8 @@ const NAV_ITEMS: Array<{
   { key: "pendingQueue", label: "Pending Queue", icon: "pending_actions", href: "/approver/dashboard/" },
   { key: "approved", label: "Approved", icon: "verified_user", href: "/approver/dashboard/?status=approved", filled: true },
   { key: "archived", label: "Archived", icon: "archive", href: "/approver/dashboard/?status=historical" },
+  { key: "hostingEventsManage", label: "Hosting events", icon: "emoji_events", href: "/approver/hosting-events/" },
+  { key: "submittedBids", label: "Submitted bids", icon: "assignment", href: "/approver/submitted-bids/" },
   { key: "biddingEvents", label: "Bidding events", icon: "emoji_events", href: "/approver/bidding-events/" },
   { key: "myBids", label: "My bids", icon: "assignment_turned_in", href: "/approver/my-bids/" },
   { key: "systemLogs", label: "System Logs", icon: "settings_suggest", href: "#" },
@@ -45,6 +50,8 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
   const affiliationSecondary = useSignal<string | null>(null);
   const showSportBodyCreate = useSignal(false);
   const showMyApplications = useSignal(false);
+  const showSrcHosting = useSignal(false);
+  const showSportBodyBidding = useSignal(false);
 
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(async () => {
@@ -68,6 +75,9 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
         Boolean(row));
 
     showMyApplications.value = u?.role === "reviewer" && Boolean(String(u.organisation_id ?? "").trim());
+
+    showSrcHosting.value = isSrcReviewerSession(u);
+    showSportBodyBidding.value = isSportBodyReviewerSession(u);
 
     if (row) {
       const code = sportBodyApprovalCode(row);
@@ -198,6 +208,8 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
               {NAV_ITEMS.filter((i) => {
                 if (i.key === "createApplication") return showSportBodyCreate.value;
                 if (i.key === "myApplications") return showMyApplications.value;
+                if (i.key === "hostingEventsManage" || i.key === "submittedBids") return showSrcHosting.value;
+                if (i.key === "biddingEvents" || i.key === "myBids") return showSportBodyBidding.value;
                 return true;
               }).map((item) => (
                 <a

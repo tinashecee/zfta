@@ -7,11 +7,11 @@ import {
   filterHostingEventsForSportBodyReviewer,
   listBiddingEvents,
   listMyBids,
-  userCanBrowseApproverHostingPages,
   type ApiBid,
 } from "~/lib/bidding-api";
 import { formatDateTime } from "~/lib/application-display";
 import { getCurrentUser } from "~/lib/auth";
+import { isSrcReviewerSession, isSportBodyReviewerSession, redirectPathIfNoHostingBidAccess } from "~/lib/hosting-access";
 import { resolveCurrentReviewerSportBodyContext } from "~/lib/reviewer-sport-body";
 import { reviewerPortalAffiliationLabel } from "~/lib/users-api";
 import { listSportBodies } from "~/lib/sport-bodies-api";
@@ -35,8 +35,13 @@ export default component$(() => {
 
   useVisibleTask$(async () => {
     const u = getCurrentUser();
-    if (!userCanBrowseApproverHostingPages(u)) {
-      window.location.assign(u?.role === "system_admin" ? "/admin/dashboard/" : "/approver/dashboard/");
+    if (isSrcReviewerSession(u)) {
+      window.location.assign("/approver/submitted-bids/");
+      return;
+    }
+    const denied = redirectPathIfNoHostingBidAccess(u);
+    if (denied) {
+      window.location.assign(denied);
       return;
     }
     if (!u) return;
@@ -60,10 +65,7 @@ export default component$(() => {
     let rows = br.data;
 
     if (u.role !== "system_admin") {
-      const ab = (u.approver_body ?? "").trim().toUpperCase();
-      const legacy = (u.body ?? "").trim().toUpperCase();
-      const isSportBody =
-        u.role === "reviewer" && (ab === "SPORTS_BODY" || legacy === "SPORT_BODY" || legacy === "SPORTS_BODY");
+      const isSportBody = u.role === "reviewer" && isSportBodyReviewerSession(u);
       if (isSportBody) {
         const ctx = await resolveCurrentReviewerSportBodyContext();
         if (!ctx.ok) {

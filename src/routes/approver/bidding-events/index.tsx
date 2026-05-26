@@ -5,11 +5,11 @@ import {
   biddingEventStatusLabel,
   filterHostingEventsForSportBodyReviewer,
   listBiddingEvents,
-  userCanBrowseApproverHostingPages,
   type ApiBiddingEvent,
 } from "~/lib/bidding-api";
 import { formatDateTime } from "~/lib/application-display";
 import { getCurrentUser } from "~/lib/auth";
+import { isSrcReviewerSession, isSportBodyReviewerSession, redirectPathIfNoHostingBidAccess } from "~/lib/hosting-access";
 import { resolveCurrentReviewerSportBodyContext } from "~/lib/reviewer-sport-body";
 import { reviewerPortalAffiliationLabel } from "~/lib/users-api";
 import { listSportBodies } from "~/lib/sport-bodies-api";
@@ -23,8 +23,13 @@ export default component$(() => {
 
   useVisibleTask$(async () => {
     const u = getCurrentUser();
-    if (!userCanBrowseApproverHostingPages(u)) {
-      window.location.assign(u?.role === "system_admin" ? "/admin/dashboard/" : "/approver/dashboard/");
+    if (isSrcReviewerSession(u)) {
+      window.location.assign("/approver/hosting-events/");
+      return;
+    }
+    const denied = redirectPathIfNoHostingBidAccess(u);
+    if (denied) {
+      window.location.assign(denied);
       return;
     }
     if (!u) return;
@@ -51,25 +56,18 @@ export default component$(() => {
       return;
     }
 
-    const ab = (u.approver_body ?? "").trim().toUpperCase();
-    const legacy = (u.body ?? "").trim().toUpperCase();
-    const isSportBody =
-      u.role === "reviewer" && (ab === "SPORTS_BODY" || legacy === "SPORT_BODY" || legacy === "SPORTS_BODY");
-    if (!isSportBody) {
-      for (const row of r.data) events.push(row);
-      return;
-    }
+    if (isSportBodyReviewerSession(u)) {
+      const ctx = await resolveCurrentReviewerSportBodyContext();
+      if (!ctx.ok) {
+        loadError.value = ctx.error;
+        return;
+      }
 
-    const ctx = await resolveCurrentReviewerSportBodyContext();
-    if (!ctx.ok) {
-      loadError.value = ctx.error;
-      return;
+      const { filtered } = filterHostingEventsForSportBodyReviewer(r.data, ctx.sportKey);
+      filterHint.value =
+        "Showing opportunities for your sport with a future bid deadline (extra browser filter; the API still decides access).";
+      for (const row of filtered) events.push(row);
     }
-
-    const { filtered } = filterHostingEventsForSportBodyReviewer(r.data, ctx.sportKey);
-    filterHint.value =
-      "Showing opportunities for your sport with a future bid deadline (extra browser filter; the API still decides access).";
-    for (const row of filtered) events.push(row);
   });
 
   return (
