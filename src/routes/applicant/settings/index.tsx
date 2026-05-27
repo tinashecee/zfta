@@ -1,6 +1,7 @@
 import { $, component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
 import { ApplicantPortalNav } from "~/components/applicant-portal-nav";
+import { appPageTitle } from "~/lib/app-branding";
 import { getStoredTheme, setTheme, type ThemePreference } from "~/lib/theme";
 
 export default component$(() => {
@@ -68,5 +69,5 @@ export default component$(() => {
 });
 
 export const head: DocumentHead = {
-  title: "Settings | Zimbabwe Sports Travel Authority",
+  title: appPageTitle("Settings"),
 };

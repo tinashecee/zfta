@@ -7,16 +7,18 @@ export type ApplicationAttachmentUploadResponse = {
   travel_documents: string | null;
 };
 
+/** 201 response from `POST /api/v1/outgoing-tours/uploads`. */
 export type OutgoingTourUploadResponse = {
-  compliance_declaration_doc: string | null;
   invitation_letter_doc: string | null;
-  national_assoc_clearance_doc: string | null;
   funding_proof_doc: string | null;
   liabilities_breakdown_doc: string | null;
+  compliance_declaration_doc?: string | null;
+  national_assoc_clearance_doc?: string | null;
 };
 
 export type OutgoingTourComplianceUploadResponse = {
   compliance_declaration_doc: string | null;
+  national_assoc_clearance_doc?: string | null;
 };
 
 export type IncomingTourUploadResponse = {
@@ -111,28 +113,36 @@ export async function uploadApplicationAttachments(files: {
 }
 
 export async function uploadOutgoingTourDocuments(files: {
-  compliance_declaration: File;
   invitation_letter: File;
-  national_assoc_clearance: File;
   funding_proof: File;
   liabilities_breakdown: File;
+  compliance_declaration?: File | null;
+  national_assoc_clearance?: File | null;
 }): Promise<{ ok: true; data: OutgoingTourUploadResponse } | { ok: false; status: number; error: string }> {
   const fd = new FormData();
-  fd.append("compliance_declaration", files.compliance_declaration);
   fd.append("invitation_letter", files.invitation_letter);
-  fd.append("national_assoc_clearance", files.national_assoc_clearance);
   fd.append("funding_proof", files.funding_proof);
   fd.append("liabilities_breakdown", files.liabilities_breakdown);
+  if (files.compliance_declaration) {
+    fd.append("compliance_declaration", files.compliance_declaration);
+  }
+  if (files.national_assoc_clearance) {
+    fd.append("national_assoc_clearance", files.national_assoc_clearance);
+  }
   return apiFetchFormData<OutgoingTourUploadResponse>("/api/v1/outgoing-tours/uploads", fd);
 }
 
 export async function uploadOutgoingTourComplianceDeclaration(files: {
   compliance_declaration: File;
+  national_assoc_clearance?: File | null;
 }): Promise<
   { ok: true; data: OutgoingTourComplianceUploadResponse } | { ok: false; status: number; error: string }
 > {
   const fd = new FormData();
   fd.append("compliance_declaration", files.compliance_declaration);
+  if (files.national_assoc_clearance) {
+    fd.append("national_assoc_clearance", files.national_assoc_clearance);
+  }
   return apiFetchFormData<OutgoingTourComplianceUploadResponse>("/api/v1/outgoing-tours/uploads/compliance", fd);
 }
 

@@ -6,6 +6,7 @@ import { DeclarationSection } from "~/components/application-form/declaration-se
 import { PersonnelSection } from "~/components/application-form/personnel-section";
 import { SubmitBar } from "~/components/application-form/submit-bar";
 import { APPLICATION_TYPES } from "~/lib/application-types";
+import { appPageTitle } from "~/lib/app-branding";
 import { getCurrentUser } from "~/lib/auth";
 import { getOrganisation } from "~/lib/organisations-api";
 import { submitTravelApplicationFlow } from "~/lib/submit-travel-application-flow";
@@ -20,9 +21,7 @@ function scrollSubmitFeedbackIntoView() {
 
 export default component$(() => {
   const personnel = useStore<TravelPersonnelRow[]>([]);
-  const complianceDeclarationFile = useSignal<File | null>(null);
   const invitationFile = useSignal<File | null>(null);
-  const nationalAssocClearanceFile = useSignal<File | null>(null);
   const fundingFile = useSignal<File | null>(null);
   const liabilitiesFile = useSignal<File | null>(null);
   const submitError = useSignal<string | null>(null);
@@ -49,18 +48,8 @@ export default component$(() => {
       return;
     }
 
-    if (!complianceDeclarationFile.value) {
-      submitError.value = "Please attach the Declaration of compliance (2.1).";
-      scrollSubmitFeedbackIntoView();
-      return;
-    }
     if (!invitationFile.value) {
       submitError.value = "Please attach the original invitation letter from the hosting entity/country (2.3).";
-      scrollSubmitFeedbackIntoView();
-      return;
-    }
-    if (!nationalAssocClearanceFile.value) {
-      submitError.value = "Please attach the National Association clearance (2.4).";
       scrollSubmitFeedbackIntoView();
       return;
     }
@@ -118,9 +107,7 @@ export default component$(() => {
       form: resolved,
       personnel,
       uploads: {
-        compliance_declaration: complianceDeclarationFile.value,
         invitation_letter: invitationFile.value,
-        national_assoc_clearance: nationalAssocClearanceFile.value,
         funding_proof: fundingFile.value,
         liabilities_breakdown: liabilitiesFile.value,
       },
@@ -196,8 +183,9 @@ export default component$(() => {
         ) : null}
 
         <div class="mb-6 rounded-xl border border-secondary/30 bg-secondary/5 p-4 text-sm text-on-surface">
-          <strong class="text-primary">Backend note:</strong> All required outgoing tour documents (2.1, 2.3, 2.4, 2.5, 2.7, 2.9)
-          are uploaded and stored on the server.
+          <strong class="text-primary">Documents at submit:</strong> invitation letter (2.3), proof of funding (2.9), and
+          liabilities / expenditure (2.7). Compliance declaration (2.1) and national association clearance (2.4) are
+          attached by your sport body during review.
         </div>
 
         <form id="outgoing-tour-form" class="space-y-12 mb-24" preventdefault:submit onSubmit$={onSubmit$}>
@@ -250,28 +238,16 @@ export default component$(() => {
             <div class="lg:col-span-4 sticky top-24">
               <h2 class="text-2xl font-bold font-headline text-primary mb-2">Applicant documents</h2>
               <p class="text-sm text-on-surface-variant leading-relaxed">
-                Declaration of compliance, original invitation, national association clearance, proof of funding, and
-                liabilities / expenditure breakdown.
+                Original invitation, proof of funding, and liabilities / expenditure breakdown. Compliance (2.1) and
+                national association clearance (2.4) are supplied by your sport body when they approve the application.
               </p>
             </div>
             <div class="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <AttachmentField
-                title="Declaration of compliance (2.1)"
-                description="Signed compliance declaration."
-                apiFieldHint="compliance_declaration (API)"
-                file={complianceDeclarationFile}
-              />
               <AttachmentField
                 title="Original invitation letter (2.3)"
                 description="From the hosting entity or country."
                 apiFieldHint="invitation_letter (API)"
                 file={invitationFile}
-              />
-              <AttachmentField
-                title="National Association clearance (2.4)"
-                description="Clearance from the relevant national association."
-                apiFieldHint="national_assoc_clearance (API)"
-                file={nationalAssocClearanceFile}
               />
               <AttachmentField
                 title="Proof of funding (2.9)"
@@ -311,5 +287,5 @@ export default component$(() => {
 });
 
 export const head: DocumentHead = {
-  title: `${APPLICATION_TYPES.outgoing_tour.label} | ZSTA`,
+  title: appPageTitle(APPLICATION_TYPES.outgoing_tour.label),
 };

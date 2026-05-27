@@ -63,13 +63,7 @@ export async function submitTravelApplicationFlow(
     return { ok: false as const, error: "Please accept the declaration to submit." };
   }
   const requiredUploadKeys: Record<ApplicationTypeKey, string[]> = {
-    outgoing_tour: [
-      "compliance_declaration",
-      "invitation_letter",
-      "national_assoc_clearance",
-      "funding_proof",
-      "liabilities_breakdown",
-    ],
+    outgoing_tour: ["invitation_letter", "funding_proof", "liabilities_breakdown"],
     incoming_tour: ["statutory_compliance_declaration", "funding_proof"],
     hosting_competition: [
       "hosting_plan",
@@ -111,9 +105,7 @@ export async function submitTravelApplicationFlow(
   const up = await (async () => {
     if (params.applicationType === "outgoing_tour") {
       return uploadOutgoingTourDocuments({
-        compliance_declaration: params.uploads.compliance_declaration as File,
         invitation_letter: params.uploads.invitation_letter as File,
-        national_assoc_clearance: params.uploads.national_assoc_clearance as File,
         funding_proof: params.uploads.funding_proof as File,
         liabilities_breakdown: params.uploads.liabilities_breakdown as File,
       });
@@ -141,7 +133,14 @@ export async function submitTravelApplicationFlow(
       const departure_date = String(fd.get("departure_date") ?? "").trim();
       const return_date = String(fd.get("return_date") ?? "").trim();
       const event_description_raw = String(fd.get("event_description") ?? "").trim();
-      const payload = {
+      const docs = up.data as {
+        invitation_letter_doc?: string | null;
+        funding_proof_doc?: string | null;
+        liabilities_breakdown_doc?: string | null;
+        compliance_declaration_doc?: string | null;
+        national_assoc_clearance_doc?: string | null;
+      };
+      const payload: Record<string, unknown> = {
         organisation_id: params.organisationId,
         sport: params.organisationSport || null,
         status: initialStatus,
@@ -151,8 +150,14 @@ export async function submitTravelApplicationFlow(
         event_description: event_description_raw ? event_description_raw : null,
         declaration_accepted: true,
         personnel: params.personnel.map(rowToPayload),
-        ...up.data,
+        invitation_letter_doc: docs.invitation_letter_doc ?? null,
+        funding_proof_doc: docs.funding_proof_doc ?? null,
+        liabilities_breakdown_doc: docs.liabilities_breakdown_doc ?? null,
       };
+      const complianceDoc = String(docs.compliance_declaration_doc ?? "").trim();
+      if (complianceDoc) payload.compliance_declaration_doc = complianceDoc;
+      const clearanceDoc = String(docs.national_assoc_clearance_doc ?? "").trim();
+      if (clearanceDoc) payload.national_assoc_clearance_doc = clearanceDoc;
       return createOutgoingTour({ application: payload, personnel: [] });
     }
 

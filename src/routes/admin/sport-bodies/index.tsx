@@ -1,6 +1,7 @@
 import { $, component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
 import { AdminPortalNav } from "~/components/admin-portal-nav";
+import { appPageTitle } from "~/lib/app-branding";
 import { CATALOG_SPORT_KEYS, type CatalogSportKey } from "~/lib/catalog-sports";
 import {
   createSportBody,
@@ -317,5 +318,5 @@ export default component$(() => {
 });
 
 export const head: DocumentHead = {
-  title: "ZSTA Admin | Sport bodies",
+  title: appPageTitle("Sport bodies — Admin"),
 };

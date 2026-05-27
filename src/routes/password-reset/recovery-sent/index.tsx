@@ -1,6 +1,7 @@
 import { component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
 import { AppLogo } from "~/components/app-logo";
+import { APP_NAME, appPageTitle } from "~/lib/app-branding";
 export default component$(() => {
   const email = useSignal<string | null>(null);
   const sent = useSignal(false);
@@ -23,7 +24,7 @@ export default component$(() => {
           <div class="flex min-w-0 items-center gap-3">
             <AppLogo href="/" size="sm" />
             <div class="text-lg font-extrabold tracking-tighter text-white uppercase font-headline truncate">
-              Zimbabwe Sports Travel Authority
+              {APP_NAME}
             </div>
           </div>
 
@@ -109,7 +110,7 @@ export default component$(() => {
           <div class="flex flex-col items-center gap-3 md:flex-row md:items-center">
             <AppLogo href="/" size="lg" />
             <div class="text-lg font-bold text-white font-headline text-center md:text-left">
-              Zimbabwe Sports Travel Authority
+              {APP_NAME}
             </div>
           </div>
           <div class="flex flex-wrap justify-center gap-8 font-body text-sm antialiased">
@@ -130,5 +131,5 @@ export default component$(() => {
 });
 
 export const head: DocumentHead = {
-  title: "Recovery Link Sent",
+  title: appPageTitle("Recovery link sent"),
 };

@@ -1,4 +1,5 @@
 import { component$ } from "@builder.io/qwik";
+import { APP_NAME } from "~/lib/app-branding";
 
 export type AppLogoProps = {
   class?: string;
@@ -19,7 +20,7 @@ export const AppLogo = component$<AppLogoProps>((props) => {
   const size = props.size ?? "md";
   const img = (
     <img
-      alt={props.alt ?? "Zimbabwe Sports Travel Authority"}
+      alt={props.alt ?? APP_NAME}
       class={[sizeHeights[size], "w-auto object-contain object-left", props.imgClass].filter(Boolean).join(" ")}
       decoding="async"
       height={48}

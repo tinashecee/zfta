@@ -1,6 +1,7 @@
 import { component$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
 import { ApplicantPortalNav } from "~/components/applicant-portal-nav";
+import { appPageTitle } from "~/lib/app-branding";
 import { listApplicationTypesForInitiator } from "~/lib/application-types";
 
 export default component$(() => {
@@ -47,5 +48,5 @@ export default component$(() => {
 });
 
 export const head: DocumentHead = {
-  title: "New application | Zimbabwe Sports Travel Authority",
+  title: appPageTitle("New application"),
 };

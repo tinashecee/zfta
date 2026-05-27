@@ -1,6 +1,7 @@
 import { component$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
 import { ApplicantPortalNav } from "~/components/applicant-portal-nav";
+import { APP_NAME, appPageTitle } from "~/lib/app-branding";
 
 export default component$(() => {
   return (
@@ -225,7 +226,7 @@ export default component$(() => {
             Digital Signature Verification
           </a>
         </div>
-        <p class="text-[10px] font-medium">© 2025 Zimbabwe Sports Travel Authority. All rights reserved.</p>
+        <p class="text-[10px] font-medium">© 2025 {APP_NAME}. All rights reserved.</p>
       </footer>
     </div>
   );

@@ -2,6 +2,7 @@ import { component$, useSignal, useStore, useVisibleTask$ } from "@builder.io/qw
 import type { DocumentHead } from "@builder.io/qwik-city";
 import { useLocation } from "@builder.io/qwik-city";
 import { ApplicantPortalNav } from "~/components/applicant-portal-nav";
+import { APP_NAME_SHORT, appPageTitle } from "~/lib/app-branding";
 import { ApplicationDocumentLink } from "~/components/application-document-link";
 import { TravelPersonnelRoster } from "~/components/travel-personnel-roster";
 import type { ApiApplication } from "~/lib/applications-api";
@@ -546,7 +547,7 @@ export default component$(() => {
                     </div>
                     <div class="min-w-0 flex-1">
                       <p class="text-xs font-bold text-on-surface-variant uppercase tracking-wide">Liaison</p>
-                      <p class="text-sm font-medium text-on-surface">ZSTA support desk</p>
+                      <p class="text-sm font-medium text-on-surface">{APP_NAME_SHORT} support desk</p>
                     </div>
                     <a
                       class="material-symbols-outlined text-secondary hover:text-primary transition-colors p-2"
@@ -744,5 +745,5 @@ export default component$(() => {
 });
 
 export const head: DocumentHead = {
-  title: "Application Detail | Zimbabwe Sports Travel Authority",
+  title: appPageTitle("Application detail"),
 };

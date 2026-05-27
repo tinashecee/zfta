@@ -1,6 +1,7 @@
 import { $, component$, useSignal, useTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
 import { AppLogo } from "~/components/app-logo";
+import { APP_NAME, APP_NAME_SHORT, appPageTitle } from "~/lib/app-branding";
 import { resolveApplicantPostLoginPath } from "~/lib/applicant-redirect";
 import { getCurrentUser, signIn, signOut, type AuthUser } from "~/lib/auth";
 
@@ -47,8 +48,8 @@ export default component$(() => {
           <div class="flex items-center gap-4 sm:gap-8">
             <AppLogo href="/" size="md" />
             <span class="text-xl font-black tracking-tighter text-emerald-950 font-headline sm:text-2xl">
-              <span class="md:hidden">ZFT</span>
-              <span class="hidden md:inline">Zim Sports Travel</span>
+              <span class="md:hidden">{APP_NAME_SHORT}</span>
+              <span class="hidden md:inline">{APP_NAME}</span>
             </span>
           </div>
 
@@ -474,7 +475,7 @@ export default component$(() => {
 });
 
 export const head: DocumentHead = {
-  title: "Zimbabwe Sports Travel Authority",
+  title: appPageTitle("Home"),
   meta: [
     {
       name: "description",

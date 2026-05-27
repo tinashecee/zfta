@@ -1,5 +1,6 @@
 import { $, component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
 import { getCurrentUser, signOut } from "~/lib/auth";
+import { APP_NAME } from "~/lib/app-branding";
 import { isSportBodyReviewerSession, isSrcReviewerSession } from "~/lib/hosting-access";
 import { resolveSportBodyRowForReviewerUser, reviewerPortalAffiliationLabel } from "~/lib/users-api";
 import { listSportBodies, sportBodyApprovalCode } from "~/lib/sport-bodies-api";
@@ -185,7 +186,7 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
           <nav class="w-full h-full min-h-screen bg-emerald-950 py-8 px-6 flex flex-col text-white overflow-hidden">
             <div class="flex items-center justify-between mb-10">
               <div>
-                <h1 class="text-lg font-black text-white uppercase tracking-tighter">Travel Authority</h1>
+                <h1 class="text-lg font-black text-white uppercase tracking-tighter">{APP_NAME}</h1>
                 <p class="font-manrope uppercase tracking-widest text-[11px] text-amber-400/90">
                   {affiliationPrimary.value ? `${affiliationPrimary.value} · ` : ""}
                   Approver

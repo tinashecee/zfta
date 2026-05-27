@@ -1,6 +1,7 @@
 import { $, component$, useSignal } from "@builder.io/qwik";
 import { AppLogo } from "~/components/app-logo";
 import { signOut } from "~/lib/auth";
+import { APP_NAME, APP_NAME_SHORT, APP_PORTAL_TITLE } from "~/lib/app-branding";
 
 type NavItemKey = "dashboard" | "applications" | "calendar" | "organization" | "settings";
 
@@ -73,9 +74,9 @@ export const ApplicantPortalNav = component$<ApplicantPortalNavProps>(({ activeI
           <div class="flex min-w-0 items-center gap-3">
             <AppLogo class="shrink-0" href="/applicant/dashboard/" size="sm" />
             <span class="text-lg font-bold tracking-tighter text-emerald-50 uppercase font-headline hidden md:inline truncate">
-              Zimbabwe Sports Travel Authority
+              {APP_NAME}
             </span>
-            <span class="text-lg font-bold tracking-tighter text-emerald-50 uppercase font-headline md:hidden">ZSTA</span>
+            <span class="text-lg font-bold tracking-tighter text-emerald-50 uppercase font-headline md:hidden">{APP_NAME_SHORT}</span>
           </div>
         </div>
 
@@ -137,7 +138,7 @@ export const ApplicantPortalNav = component$<ApplicantPortalNavProps>(({ activeI
             <div class="flex flex-col gap-3">
               <AppLogo href="/applicant/dashboard/" size="md" />
               <div>
-                <span class="text-lg font-black text-emerald-50 uppercase tracking-widest">ZSTA Portal</span>
+                <span class="text-lg font-black text-emerald-50 uppercase tracking-widest">{APP_PORTAL_TITLE}</span>
                 <span class="text-emerald-100/60 text-xs font-bold mt-1 block">Diplomatic Pitch</span>
               </div>
             </div>

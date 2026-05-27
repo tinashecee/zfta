@@ -1,5 +1,6 @@
 import { $, component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
 import { getCurrentUser, signOut } from "~/lib/auth";
+import { APP_ADMIN_TITLE } from "~/lib/app-branding";
 
 type AdminNavItemKey =
   | "overview"
@@ -107,7 +108,7 @@ export const AdminPortalNav = component$<AdminPortalNavProps>(({ activeItem }) =
             </span>
           </div>
           <div>
-            <h1 class="text-xl font-bold tracking-tighter text-yellow-500">ZSTA Admin</h1>
+            <h1 class="text-xl font-bold tracking-tighter text-yellow-500">{APP_ADMIN_TITLE}</h1>
             <p class="text-[10px] uppercase tracking-widest text-emerald-100/50">Government Authority</p>
           </div>
         </div>
@@ -245,7 +246,7 @@ export const AdminPortalNav = component$<AdminPortalNavProps>(({ activeItem }) =
                 </span>
               </div>
               <div>
-                <h1 class="text-xl font-bold tracking-tighter text-yellow-500">ZSTA Admin</h1>
+                <h1 class="text-xl font-bold tracking-tighter text-yellow-500">{APP_ADMIN_TITLE}</h1>
                 <p class="text-[10px] uppercase tracking-widest text-emerald-100/50">Government Authority</p>
               </div>
             </div>
