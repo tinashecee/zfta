@@ -8,9 +8,11 @@ import {
 } from "~/lib/applications-api";
 import { buildApplicationRecordFromForm } from "~/lib/build-application-payload";
 import { validateApplicationPayload, validateNewApplicationFormData } from "~/lib/validate-application-form";
-import { personnelRoleCountsForApplication, rowToPayload, type TravelPersonnelRow } from "~/lib/travel-personnel-types";
+import { personnelRoleCountsForApplication, rowToIncomingDelegationPayload, rowToPayload, validateIncomingDelegationRows, type TravelPersonnelRow } from "~/lib/travel-personnel-types";
 import { validateMinLeadDays } from "~/lib/application-form-lead";
 import type { ApplicationTypeKey } from "~/lib/application-types";
+import { initialTravelApplicationStatus } from "~/lib/approval-rules";
+import { validateTournamentClassificationOptional } from "~/lib/tournament-classification";
 
 export type SubmitTravelApplicationFlowParams = {
   form: HTMLFormElement;
@@ -28,18 +30,8 @@ export type SubmitTravelApplicationFlowResult =
   | { ok: true; reference: string }
   | { ok: false; error: string };
 
-/** Type A: football organisation + PSL affiliate → AFFILIATE queue; else Type B → sport-body queue. */
-export function initialTravelApplicationStatus(
-  organisationSport: string,
-  pslAffiliate: boolean,
-): "awaiting_psl" | "awaiting_sport_body" {
-  const sport = String(organisationSport ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-  const usePslRoute = sport === "football" && Boolean(pslAffiliate);
-  return usePslRoute ? "awaiting_psl" : "awaiting_sport_body";
-}
+/** Re-exported from {@link "~/lib/approval-rules"} so existing imports keep working. */
+export { initialTravelApplicationStatus };
 
 /**
  * Shared client flow: validate form → upload attachments → build application → POST /applications.
@@ -54,13 +46,28 @@ export async function submitTravelApplicationFlow(
   const formValidation = validateNewApplicationFormData(fd);
   if (formValidation) return { ok: false as const, error: formValidation };
 
-  const leadDateKey = params.applicationType === "hosting_competition" ? "start_date" : "departure_date";
+  const leadDateKey =
+    params.applicationType === "hosting_competition"
+      ? "tour_start_date"
+      : params.applicationType === "incoming_tour"
+        ? "incoming_arrival_date"
+        : "departure_date";
   const leadDate = String(fd.get(leadDateKey) ?? "").trim();
-  const leadErr = validateMinLeadDays(leadDate, params.minLeadDays);
-  if (leadErr) return { ok: false as const, error: leadErr };
+  if (leadDate) {
+    const leadErr = validateMinLeadDays(leadDate, params.minLeadDays);
+    if (leadErr) return { ok: false as const, error: leadErr };
+  }
 
   if (fd.get("declaration_accepted") !== "on") {
     return { ok: false as const, error: "Please accept the declaration to submit." };
+  }
+  if (params.applicationType === "incoming_tour" || params.applicationType === "hosting_competition") {
+    const tournamentClasificationResult = validateTournamentClassificationOptional(
+      String(fd.get("tournament_clasification") ?? ""),
+    );
+    if (tournamentClasificationResult && typeof tournamentClasificationResult === "object") {
+      return { ok: false as const, error: tournamentClasificationResult.error };
+    }
   }
   const requiredUploadKeys: Record<ApplicationTypeKey, string[]> = {
     outgoing_tour: ["invitation_letter", "funding_proof", "liabilities_breakdown"],
@@ -80,7 +87,10 @@ export async function submitTravelApplicationFlow(
       error: `Please attach all required documents (${missing.join(", ")}).`,
     };
   }
-  if (params.applicationType !== "hosting_competition") {
+  if (params.applicationType === "incoming_tour") {
+    const delegationErr = validateIncomingDelegationRows(params.personnel);
+    if (delegationErr) return { ok: false as const, error: delegationErr };
+  } else if (params.applicationType !== "hosting_competition") {
     if (params.personnel.length === 0) {
       return { ok: false as const, error: "Add at least one person to the roster (traveller or key contact)." };
     }
@@ -94,12 +104,6 @@ export async function submitTravelApplicationFlow(
     !params.personnel.some((r) => String(r.role ?? "").trim().toLowerCase() === "player")
   ) {
     return { ok: false as const, error: 'Outgoing tour roster must include at least one person with role "player".' };
-  }
-  if (
-    params.applicationType === "incoming_tour" &&
-    !params.personnel.some((r) => String(r.role ?? "").trim().toLowerCase() === "player")
-  ) {
-    return { ok: false as const, error: 'Incoming tour roster must include at least one person with role "player".' };
   }
 
   const up = await (async () => {
@@ -154,6 +158,10 @@ export async function submitTravelApplicationFlow(
         funding_proof_doc: docs.funding_proof_doc ?? null,
         liabilities_breakdown_doc: docs.liabilities_breakdown_doc ?? null,
       };
+      const tourStart = String(fd.get("tour_start_date") ?? "").trim();
+      const tourEnd = String(fd.get("tour_end_date") ?? "").trim();
+      if (tourStart) payload.tour_start_date = tourStart;
+      if (tourEnd) payload.tour_end_date = tourEnd;
       const complianceDoc = String(docs.compliance_declaration_doc ?? "").trim();
       if (complianceDoc) payload.compliance_declaration_doc = complianceDoc;
       const clearanceDoc = String(docs.national_assoc_clearance_doc ?? "").trim();
@@ -162,9 +170,11 @@ export async function submitTravelApplicationFlow(
     }
 
     if (params.applicationType === "incoming_tour") {
-      const host_country = String(fd.get("host_country") ?? "").trim();
-      const departure_date = String(fd.get("departure_date") ?? "").trim();
-      const return_date = String(fd.get("return_date") ?? "").trim();
+      const host_country = String(fd.get("host_country") ?? "Zimbabwe").trim() || "Zimbabwe";
+      const tour_start_date = String(fd.get("tour_start_date") ?? "").trim();
+      const tour_end_date = String(fd.get("tour_end_date") ?? "").trim();
+      const incoming_arrival_date = String(fd.get("incoming_arrival_date") ?? "").trim();
+      const incoming_departure_date = String(fd.get("incoming_departure_date") ?? "").trim();
       const training_facility_name = String(fd.get("training_facility_name") ?? "").trim();
       const represented_country_raw = String(fd.get("represented_country") ?? "").trim();
       const event_description_raw = String(fd.get("event_description") ?? "").trim();
@@ -177,16 +187,22 @@ export async function submitTravelApplicationFlow(
         sport: params.organisationSport || null,
         status: initialStatus,
         host_country,
-        departure_date,
-        return_date,
         training_facility_name,
+        tour_start_date,
+        tour_end_date,
+        incoming_arrival_date,
+        incoming_departure_date,
+        departure_date: incoming_arrival_date,
+        return_date: incoming_departure_date,
         declaration_accepted: true,
-        personnel: params.personnel.map(rowToPayload),
+        personnel: params.personnel.map(rowToIncomingDelegationPayload),
         statutory_compliance_declaration_doc: docs.statutory_compliance_declaration_doc ?? null,
         funding_proof_doc: docs.funding_proof_doc ?? null,
       };
       if (represented_country_raw) payload.represented_country = represented_country_raw;
       if (event_description_raw) payload.event_description = event_description_raw;
+      const tournament_clasification = String(fd.get("tournament_clasification") ?? "").trim();
+      if (tournament_clasification) payload.tournament_clasification = tournament_clasification;
       return createIncomingTour({ application: payload, personnel: [] });
     }
 
@@ -194,11 +210,11 @@ export async function submitTravelApplicationFlow(
       const event_type = String(fd.get("event_type") ?? "").trim();
       const tournament_name = String(fd.get("tournament_name") ?? "").trim();
       const tournament_name_other = String(fd.get("tournament_name_other") ?? "").trim();
-      const event_display_name = String(fd.get("event_display_name") ?? "").trim();
       const host_country = String(fd.get("host_country") ?? "").trim();
       const host_city = String(fd.get("host_city") ?? "").trim();
-      const start_date = String(fd.get("start_date") ?? "").trim();
-      const end_date = String(fd.get("end_date") ?? "").trim();
+      const tour_start_date = String(fd.get("tour_start_date") ?? "").trim();
+      const tour_end_date = String(fd.get("tour_end_date") ?? "").trim();
+      const event_display_name = [tournament_name_other, host_city || host_country].filter(Boolean).join(" — ");
       const docs = up.data as unknown as {
         hosting_plan_doc?: string | null;
         budget_doc?: string | null;
@@ -216,8 +232,8 @@ export async function submitTravelApplicationFlow(
         event_display_name,
         host_country,
         host_city: host_city || null,
-        start_date,
-        end_date,
+        tour_start_date,
+        tour_end_date,
         declaration_accepted: true,
         hosting_plan_doc: docs.hosting_plan_doc ?? null,
         budget_doc: docs.budget_doc ?? null,
@@ -225,6 +241,8 @@ export async function submitTravelApplicationFlow(
         roll_out_plan_doc: docs.roll_out_plan_doc ?? null,
         organising_committee_doc: docs.organising_committee_doc ?? null,
       };
+      const tournament_clasification = String(fd.get("tournament_clasification") ?? "").trim();
+      if (tournament_clasification) payload.tournament_clasification = tournament_clasification;
       return createHostingCompetition({ application: payload, personnel: [] });
     }
 

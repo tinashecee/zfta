@@ -1,4 +1,5 @@
 import { component$ } from "@builder.io/qwik";
+import { TournamentClassificationSelect } from "~/components/application-form/tournament-classification-select";
 
 /** Minimal event fields for hosting applications (API still requires event_type, tournament, host country). */
 export const HostingEventBasicsSection = component$(() => {
@@ -13,6 +14,7 @@ export const HostingEventBasicsSection = component$(() => {
       <div class="lg:col-span-8 bg-surface-container-lowest p-8 rounded-xl shadow-sm border border-outline-variant/15 space-y-4">
         <input type="hidden" name="event_type" value="tournament" />
         <input type="hidden" name="tournament_name" value="Other" />
+        <TournamentClassificationSelect />
         <div class="space-y-1.5">
           <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">
             Competition / event name<span class="text-primary">{REQ}</span>
@@ -45,18 +47,6 @@ export const HostingEventBasicsSection = component$(() => {
             class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
             placeholder="City and main venue"
             type="text"
-          />
-        </div>
-        <div class="space-y-1.5">
-          <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">
-            Event display name<span class="text-primary">{REQ}</span>
-          </label>
-          <input
-            name="event_display_name"
-            class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
-            placeholder="e.g. COSAFA Senior Challenge — Harare"
-            type="text"
-            required
           />
         </div>
       </div>

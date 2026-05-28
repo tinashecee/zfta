@@ -2,17 +2,11 @@ import type { ApiSportBody } from "~/lib/sport-bodies-api";
 import { sportBodyApprovalCode } from "~/lib/sport-bodies-api";
 import type { ApiZimbabweSport } from "~/lib/zimbabwe-sports-api";
 
-/** First-stage application statuses (sport-specific body, then SRC). */
-export const PRIMARY_STAGE_STATUSES = new Set([
-  "awaiting_body",
-  "awaiting_zifa",
-  "awaiting_primary_body",
-  "awaiting_sport_body",
-]);
-
-export function isPrimaryStageStatus(status: string | undefined): boolean {
-  return PRIMARY_STAGE_STATUSES.has((status ?? "").trim().toLowerCase());
-}
+/**
+ * Re-exported from {@link "~/lib/approval-rules"} — that file is the source of truth for
+ * reviewer routing, stage predicates and state transitions.
+ */
+export { PRIMARY_STAGE_STATUSES, isPrimaryStageStatus } from "~/lib/approval-rules";
 
 /** Per-trip `application.sport` wins over the organisation default for first-line routing. */
 export function routingSportForApplication(
@@ -93,17 +87,10 @@ function resolvedFromSportBody(body: ApiSportBody): ResolvedPrimaryBody {
 }
 
 /**
- * True when a resolved primary routing code is the same “body” as the reviewer’s routing token
- * (case-insensitive; allows substring match like approval rows).
+ * True when a resolved primary routing code is the same "body" as the reviewer's routing token.
+ * Re-exported from {@link "~/lib/approval-rules"}.
  */
-export function reviewerPrimaryCodesEqual(resolvedCode: string, reviewerRoutingBody: string): boolean {
-  const a = resolvedCode.trim().toUpperCase();
-  const b = reviewerRoutingBody.trim().toUpperCase();
-  if (!a || !b) return false;
-  if (a === b) return true;
-  if (a.includes(b) || b.includes(a)) return true;
-  return false;
-}
+export { reviewerPrimaryCodesEqual } from "~/lib/approval-rules";
 
 /**
  * Maps organisation / application `sport` text to the first-line approver body using the catalog.

@@ -1,7 +1,10 @@
 import { component$ } from "@builder.io/qwik";
+import { TournamentClassificationSelect } from "~/components/application-form/tournament-classification-select";
+import { APPLICATION_TYPES } from "~/lib/application-types";
 
-/** Incoming tour: country/org (1.3), accommodation (1.7), purpose (1.6) — maps to existing API columns. */
+/** Incoming tour: country/org (1.3), accommodation (1.7), purpose (1.6), tour & travel dates. */
 export const IncomingTourDetailsSection = component$(() => {
+  const minLeadDays = APPLICATION_TYPES.incoming_tour.minLeadDays;
   const COUNTRIES = [
     "Afghanistan",
     "Albania",
@@ -201,7 +204,62 @@ export const IncomingTourDetailsSection = component$(() => {
   ] as const;
 
   return (
-    <section class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+    <>
+      <section class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div class="lg:col-span-4 sticky top-24">
+          <h2 class="text-2xl font-bold font-headline text-primary mb-2">Tour &amp; travel dates</h2>
+          <p class="text-sm text-on-surface-variant leading-relaxed">
+            Tour event window and when the visiting party arrives in and departs from Zimbabwe. Arrival must be at
+            least {minLeadDays} days from today.
+          </p>
+        </div>
+
+        <div class="lg:col-span-8 bg-surface-container-lowest p-8 rounded-xl shadow-sm border border-outline-variant/15">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-1.5">
+              <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">Tour start date</label>
+              <input
+                name="tour_start_date"
+                class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
+                type="date"
+                required
+              />
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">Tour end date</label>
+              <input
+                name="tour_end_date"
+                class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
+                type="date"
+                required
+              />
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">Arrival date</label>
+              <input
+                name="incoming_arrival_date"
+                class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
+                type="date"
+                required
+              />
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">Departure date</label>
+              <input
+                name="incoming_departure_date"
+                class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
+                type="date"
+                required
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
       <div class="lg:col-span-4 sticky top-24">
         <h2 class="text-2xl font-bold font-headline text-primary mb-2">Incoming tour details</h2>
         <p class="text-sm text-on-surface-variant leading-relaxed">
@@ -210,6 +268,8 @@ export const IncomingTourDetailsSection = component$(() => {
       </div>
 
       <div class="lg:col-span-8 bg-surface-container-lowest p-8 rounded-xl shadow-sm border border-outline-variant/15 space-y-6">
+        <TournamentClassificationSelect />
+
         <div class="space-y-1.5">
           <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">
             Country represented
@@ -253,5 +313,6 @@ export const IncomingTourDetailsSection = component$(() => {
         </div>
       </div>
     </section>
+    </>
   );
 });

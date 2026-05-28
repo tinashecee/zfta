@@ -152,51 +152,10 @@ export default component$(() => {
         ) : null}
 
         <form id="incoming-tour-form" class="space-y-12 mb-24" preventdefault:submit onSubmit$={onSubmit$}>
-          <section class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <div class="lg:col-span-4 sticky top-24">
-              <h2 class="text-2xl font-bold font-headline text-primary mb-2">Destination &amp; dates</h2>
-              <p class="text-sm text-on-surface-variant leading-relaxed">
-                Minimum <span class="font-semibold text-primary">{typeDef.minLeadDays} days</span> before arrival.
-              </p>
-            </div>
-            <div class="lg:col-span-8 bg-surface-container-lowest p-8 rounded-xl shadow-sm border border-outline-variant/15">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="space-y-1.5 md:col-span-2">
-                  <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">Host country</label>
-                  <input
-                    name="host_country"
-                    class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body opacity-90"
-                    value="Zimbabwe"
-                    readOnly
-                    required
-                  />
-                </div>
-
-                <div class="space-y-1.5">
-                  <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">Arrival date</label>
-                  <input
-                    name="departure_date"
-                    class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
-                    type="date"
-                    required
-                  />
-                </div>
-
-                <div class="space-y-1.5">
-                  <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">Departure date</label>
-                  <input
-                    name="return_date"
-                    class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
-                    type="date"
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-          </section>
+          <input type="hidden" name="host_country" value="Zimbabwe" />
 
           <IncomingTourDetailsSection />
-          <PersonnelSection personnel={personnel} mode="create" />
+          <PersonnelSection personnel={personnel} mode="create" variant="incoming_delegation" />
 
           <section class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             <div class="lg:col-span-4 sticky top-24">

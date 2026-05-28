@@ -139,37 +139,10 @@ export function inferApproverFormFromUser(
 }
 
 /**
- * Resolves the reviewer “routing” token used by approver UI (SRC or sport-body approval code).
- * Requires `sportBodies` when the user is a sports-body approver (`SPORTS_BODY` or legacy `sport_body_id` only).
+ * Reviewer routing is owned by {@link "~/lib/approval-rules"}; re-exported for back-compat.
  */
-export function reviewerRoutingBodyFromSession(
-  user: Pick<AuthUser, "body" | "approver_body" | "sport_body_id" | "sports_body"> | null | undefined,
-  sportBodies: ApiSportBody[],
-): string | null {
-  if (!user) return null;
-  const ab = (user.approver_body ?? "").trim().toUpperCase();
-  if (ab === "SRC") return ab;
-  if (ab === "IMMIGRATION") return null;
-
-  const legacyHi = (user.body ?? "").trim().toUpperCase();
-  if (legacyHi === "SRC") return legacyHi;
-  if (legacyHi === "IMMIGRATION") return null;
-
-  const row = resolveSportBodyRowForReviewerUser(user, sportBodies);
-  if (row) return sportBodyApprovalCode(row);
-
-  const sbStored = coerceSportsBodyToString(user.sports_body);
-  if (ab === "SPORTS_BODY" && sbStored) return sbStored.toUpperCase();
-
-  const legacy = (user.body ?? "").trim();
-  if (legacy) {
-    const u = legacy.toUpperCase();
-    if (u === "SPORT_BODY" || u === "SPORTS_BODY") return null;
-    if (/^[A-Z0-9][A-Z0-9_-]{0,40}$/.test(u)) return u;
-  }
-
-  return null;
-}
+import { reviewerRoutingBodyFromSession } from "~/lib/approval-rules";
+export { reviewerRoutingBodyFromSession };
 
 /**
  * Short label for approver chrome: sport-body **name** when the user maps to a catalog row; otherwise routing token (SRC, code).

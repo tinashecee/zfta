@@ -1,4 +1,5 @@
 import { component$ } from "@builder.io/qwik";
+import { TournamentClassificationSelect } from "~/components/application-form/tournament-classification-select";
 
 /** Incoming tours: minimal event row so API validation passes (`event_type`, tournament, host). */
 export const IncomingEventBasicsSection = component$(() => {
@@ -12,6 +13,7 @@ export const IncomingEventBasicsSection = component$(() => {
       <div class="lg:col-span-8 bg-surface-container-lowest p-8 rounded-xl shadow-sm border border-outline-variant/15 space-y-4">
         <input type="hidden" name="event_type" value="other" />
         <input type="hidden" name="tournament_name" value="Other" />
+        <TournamentClassificationSelect />
         <div class="space-y-1.5">
           <label class="block text-sm font-semibold font-label text-on-surface-variant ml-1">Tour / event title</label>
           <input

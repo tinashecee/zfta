@@ -28,6 +28,7 @@ import {
 import { getCurrentUser } from "~/lib/auth";
 import { getOrganisation, organisationDisplayName } from "~/lib/organisations-api";
 import { resolvePrimaryBodyFromOrgSport, routingSportForApplication } from "~/lib/sport-routing";
+import { tournamentClassificationLabel } from "~/lib/tournament-classification";
 import { listSportBodies } from "~/lib/sport-bodies-api";
 import { listZimbabweSports } from "~/lib/zimbabwe-sports-api";
 import { apiPersonnelToRow, type TravelPersonnelRow } from "~/lib/travel-personnel-types";
@@ -617,6 +618,12 @@ export default component$(() => {
                         <dd class="sm:col-span-2">{str(app.tournament_name_other)}</dd>
                       </div>
                     ) : null}
+                    {str(app.tournament_clasification) ? (
+                      <div class="grid sm:grid-cols-3 gap-1">
+                        <dt class="text-on-surface-variant">Tournament classification</dt>
+                        <dd class="sm:col-span-2">{tournamentClassificationLabel(app.tournament_clasification)}</dd>
+                      </div>
+                    ) : null}
                     {str(app.opponent_team_name) || str(app.opponent_team_country) ? (
                       <div class="grid sm:grid-cols-3 gap-1">
                         <dt class="text-on-surface-variant">Opponent</dt>
@@ -720,9 +727,15 @@ export default component$(() => {
             </section>
 
             <section class="mt-12 space-y-4 border-t border-outline-variant/20 pt-12">
-              <h2 class="text-2xl font-bold font-headline text-primary">Travelling personnel</h2>
+              <h2 class="text-2xl font-bold font-headline text-primary">
+                {String(app.application_type ?? "").trim().toLowerCase() === "incoming_tour"
+                  ? "Squad roster"
+                  : "Travelling personnel"}
+              </h2>
               <p class="text-sm text-on-surface-variant max-w-2xl">
-                Submitted squad roster (read-only).
+                {String(app.application_type ?? "").trim().toLowerCase() === "incoming_tour"
+                  ? "Submitted delegation roster (read-only)."
+                  : "Submitted squad roster (read-only)."}
               </p>
               <div class="bg-surface-container-lowest p-6 md:p-8 rounded-xl shadow-sm border border-outline-variant/15">
                 <TravelPersonnelRoster personnel={personnel} mode="view" />

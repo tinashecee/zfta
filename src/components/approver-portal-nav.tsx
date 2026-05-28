@@ -14,6 +14,7 @@ type ApproverNavItemKey =
   | "pendingQueue"
   | "approved"
   | "archived"
+  | "reports"
   | "biddingEvents"
   | "myBids"
   | "systemLogs"
@@ -37,6 +38,7 @@ const NAV_ITEMS: Array<{
   { key: "pendingQueue", label: "Pending Queue", icon: "pending_actions", href: "/approver/dashboard/" },
   { key: "approved", label: "Approved", icon: "verified_user", href: "/approver/dashboard/?status=approved", filled: true },
   { key: "archived", label: "Archived", icon: "archive", href: "/approver/dashboard/?status=historical" },
+  { key: "reports", label: "Reports", icon: "analytics", href: "/approver/reports/" },
   { key: "hostingEventsManage", label: "Hosting events", icon: "emoji_events", href: "/approver/hosting-events/" },
   { key: "submittedBids", label: "Submitted bids", icon: "assignment", href: "/approver/submitted-bids/" },
   { key: "biddingEvents", label: "Bidding events", icon: "emoji_events", href: "/approver/bidding-events/" },
@@ -52,6 +54,7 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
   const showSportBodyCreate = useSignal(false);
   const showMyApplications = useSignal(false);
   const showSrcHosting = useSignal(false);
+  const showSrcReports = useSignal(false);
   const showSportBodyBidding = useSignal(false);
 
   // eslint-disable-next-line qwik/no-use-visible-task
@@ -78,6 +81,7 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
     showMyApplications.value = u?.role === "reviewer" && Boolean(String(u.organisation_id ?? "").trim());
 
     showSrcHosting.value = isSrcReviewerSession(u);
+    showSrcReports.value = isSrcReviewerSession(u);
     showSportBodyBidding.value = isSportBodyReviewerSession(u);
 
     if (row) {
@@ -210,6 +214,7 @@ export const ApproverPortalNav = component$<ApproverPortalNavProps>(({ activeIte
                 if (i.key === "createApplication") return showSportBodyCreate.value;
                 if (i.key === "myApplications") return showMyApplications.value;
                 if (i.key === "hostingEventsManage" || i.key === "submittedBids") return showSrcHosting.value;
+                if (i.key === "reports") return showSrcReports.value;
                 if (i.key === "biddingEvents" || i.key === "myBids") return showSportBodyBidding.value;
                 return true;
               }).map((item) => (

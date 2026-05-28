@@ -63,6 +63,8 @@ export type ApiApplication = {
   event_type?: string;
   tournament_name?: string | null;
   tournament_name_other?: string | null;
+  /** Optional; hosting competitions and incoming tours. */
+  tournament_clasification?: string | null;
   opponent_team_name?: string | null;
   opponent_team_country?: string | null;
   training_facility_name?: string | null;
@@ -75,6 +77,21 @@ export type ApiApplication = {
   port_of_exit?: string | null;
   departure_date?: string;
   return_date?: string;
+  /** Outgoing tour event window (defaults to departure/return on create if omitted). */
+  tour_start_date?: string | null;
+  tour_end_date?: string | null;
+  /** Incoming tour travel dates (defaults to departure/return on create if omitted). */
+  incoming_arrival_date?: string | null;
+  incoming_departure_date?: string | null;
+  /** Hosting competition event window. */
+  start_date?: string | null;
+  end_date?: string | null;
+  /** Incoming tour — country represented by visiting party. */
+  represented_country?: string | null;
+  hosting_plan_doc?: string | null;
+  budget_doc?: string | null;
+  roll_out_plan_doc?: string | null;
+  organising_committee_doc?: string | null;
   player_count?: number;
   officials_count?: number;
   total_travellers?: number;

@@ -165,7 +165,7 @@ export default component$(() => {
                     Start date <span class="text-primary">(required)</span>
                   </label>
                   <input
-                    name="start_date"
+                    name="tour_start_date"
                     class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
                     type="date"
                     required
@@ -176,7 +176,7 @@ export default component$(() => {
                     End date <span class="text-primary">(required)</span>
                   </label>
                   <input
-                    name="end_date"
+                    name="tour_end_date"
                     class="w-full bg-surface-container-highest border-none rounded-xl h-12 px-4 focus:ring-1 focus:ring-primary/30 transition-all font-body"
                     type="date"
                     required

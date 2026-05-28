@@ -2,9 +2,8 @@ import { component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
 import { useLocation } from "@builder.io/qwik-city";
 import { ApproverPortalNav } from "~/components/approver-portal-nav";
+import { ApplicationDossier } from "~/components/processing/application-dossier";
 import { AttachmentField } from "~/components/application-form/attachment-field";
-import { ApplicationDocumentLink } from "~/components/application-document-link";
-import { TravelPersonnelRoster } from "~/components/travel-personnel-roster";
 import type { ApiApplication } from "~/lib/applications-api";
 import { getApplication, patchApplication, uploadOutgoingTourComplianceDeclaration } from "~/lib/applications-api";
 import type { ApiApproval } from "~/lib/approvals-api";
@@ -12,75 +11,42 @@ import { listApprovals, createApproval } from "~/lib/approvals-api";
 import {
   getGovernanceChipPair,
   hasUnderReviewApprovalForBody,
-  hasAnySportBodyApproved,
-  isLatestPrimaryBodyApproved,
-  isLatestSrcTerminal,
+} from "~/lib/approver-approval-helpers";
+import {
+  affiliateCanEditApplication,
+  affiliateReadOnlyExplanation,
+  primaryReadOnlyExplanation,
+  primaryReviewerCanEditApplication,
+  reviewerMatchesApplicationStage,
+  reviewerRoutingBodyFromSession,
+  shouldAutoCreateAffiliateUnderReview,
   shouldAutoCreateSrcUnderReview,
   srcCanEditApplication,
-} from "~/lib/approver-approval-helpers";
+  srcReadOnlyExplanation,
+} from "~/lib/approval-rules";
 import { apiFetchJson, getCurrentUser, persistStoredSessionUser } from "~/lib/auth";
-import { meResponseToAuthUser, reviewerRoutingBodyFromSession } from "~/lib/users-api";
+import { meResponseToAuthUser } from "~/lib/users-api";
 import {
-  isPrimaryStageStatus,
   resolvePrimaryBodyFromOrgSport,
-  reviewerPrimaryCodesEqual,
   routingSportForApplication,
 } from "~/lib/sport-routing";
 import { listSportBodies } from "~/lib/sport-bodies-api";
 import { listZimbabweSports } from "~/lib/zimbabwe-sports-api";
-import { formatIsoDate, formatDateTime, labelEventType } from "~/lib/application-display";
+import { formatDateTime, labelEventType } from "~/lib/application-display";
+import { labelApplicationType } from "~/lib/application-types";
 import { createCertificate } from "~/lib/certificates-api";
-import { getOrganisation, organisationDisplayName } from "~/lib/organisations-api";
+import { getOrganisation, organisationDisplayName, type ApiOrganisation } from "~/lib/organisations-api";
 import { apiPersonnelToRow, type TravelPersonnelRow } from "~/lib/travel-personnel-types";
 
 type DecisionAction = "approved" | "rejected" | "information_requested";
 type SrcDecisionAction = "awaiting_information" | "approved" | "rejected";
+type AffiliateDecisionAction = "approved" | "rejected" | "information_requested";
 type ReviewerBody = string | null;
 
 function str(v: string | null | undefined | number | boolean): string {
   if (v === null || v === undefined) return "";
   if (typeof v === "boolean") return v ? "Yes" : "No";
   return String(v).trim();
-}
-
-/** First-line sport body may record decisions only while the application is in a primary-stage status. */
-function primaryStageCanEditApplication(app: ApiApplication): boolean {
-  return isPrimaryStageStatus(app.status);
-}
-
-function primaryReadOnlyExplanation(
-  status: string | undefined,
-  primaryLabel: string,
-): { title: string; body: string } {
-  const s = (status ?? "").trim().toLowerCase();
-  if (s === "awaiting_src") {
-    return {
-      title: "With SRC now",
-      body: `${primaryLabel}’s review is complete. This application is with SRC — you cannot submit further ${primaryLabel} decisions here.`,
-    };
-  }
-  if (s === "rejected") {
-    return {
-      title: "Not editable",
-      body: `This application is no longer open for ${primaryLabel} decisions.`,
-    };
-  }
-  if (s === "information_requested") {
-    return {
-      title: "Awaiting applicant",
-      body: `Information was requested from the applicant. You can review the dossier below; new official decisions from ${primaryLabel} will be available when the application is submitted again for review.`,
-    };
-  }
-  if (s === "approved") {
-    return {
-      title: "Approved",
-      body: "This application is fully approved or is with SRC. No further first-line body changes apply.",
-    };
-  }
-  return {
-    title: "Read-only",
-    body: `This application cannot be edited from the ${primaryLabel} reviewer screen.`,
-  };
 }
 
 function successMessageForDecision(action: DecisionAction): string {
@@ -103,40 +69,30 @@ function successMessageForSrcDecision(action: SrcDecisionAction): string {
   return "Decision saved: rejected.";
 }
 
+function successMessageForAffiliateDecision(action: AffiliateDecisionAction): string {
+  if (action === "approved") {
+    return "Decision saved: PSL approved. The application is now awaiting the sport body.";
+  }
+  if (action === "rejected") {
+    return "Decision saved: rejected.";
+  }
+  return "Decision saved: information requested — recorded on the approval dossier.";
+}
+
 function processingPortalTitle(body: ReviewerBody, primaryLabel: string): string {
   if (body === "SRC") return "Official Approver Portal - SRC Queue";
-  return `Official Approver Portal - ${primaryLabel} Queue`;
+  if (body === "AFFILIATE") return "Official Approver Portal - PSL Queue";
+  if (primaryLabel) return `Official Approver Portal - ${primaryLabel} Queue`;
+  return "Official Approver Portal";
 }
 
-function srcReadOnlyExplanation(
-  app: ApiApplication,
-  approvals: ApiApproval[],
-  primaryBodyCode: string,
-  primaryLabel: string,
-): { title: string; body: string } {
-  const st = (app.status ?? "").trim().toLowerCase();
-  if (st !== "awaiting_src") {
-    return {
-      title: "Not in SRC queue",
-      body: "SRC actions are available when the application status is awaiting SRC.",
-    };
-  }
-  if (isLatestSrcTerminal(approvals)) {
-    return {
-      title: "SRC decision recorded",
-      body: "The SRC approval row is complete — you cannot submit further SRC decisions here.",
-    };
-  }
-  return {
-    title: "Read-only",
-    body: "This application cannot be edited from the SRC reviewer screen.",
-  };
-}
-
-/** True when the signed-in reviewer’s routing token matches the application’s first-line body code. */
-function primaryReviewerMatchesApplication(reviewer: ReviewerBody, primaryCode: string): boolean {
-  if (reviewer == null || reviewer === "" || !primaryCode) return false;
-  return reviewerPrimaryCodesEqual(primaryCode, reviewer);
+/** True when the signed-in reviewer matches the application's current first-line/primary stage. */
+function primaryReviewerMatchesApplication(reviewer: ReviewerBody, primaryCode: string, status: string | undefined): boolean {
+  return reviewerMatchesApplicationStage({
+    reviewerBody: reviewer,
+    applicationStatus: status,
+    applicationPrimaryBodyCode: primaryCode,
+  });
 }
 
 function submittedDays(app: ApiApplication): string {
@@ -155,12 +111,12 @@ export default component$(() => {
   const loading = useSignal(true);
   const loadError = useSignal<string | null>(null);
   const application = useSignal<ApiApplication | null>(null);
-  const organisationName = useSignal<string>("");
-  const organisationSport = useSignal<string>("");
+  const organisation = useSignal<ApiOrganisation | null>(null);
   const personnel = useSignal<TravelPersonnelRow[]>([]);
 
   const actionSelected = useSignal<DecisionAction | null>(null);
   const srcActionSelected = useSignal<SrcDecisionAction | null>(null);
+  const affiliateActionSelected = useSignal<AffiliateDecisionAction | null>(null);
   const decisionNote = useSignal("");
   const complianceDeclarationFile = useSignal<File | null>(null);
   const nationalAssocClearanceFile = useSignal<File | null>(null);
@@ -169,8 +125,8 @@ export default component$(() => {
   const successToast = useSignal<string | null>(null);
   const approvals = useSignal<ApiApproval[]>([]);
   const reviewerBody = useSignal<ReviewerBody>(null);
-  const primaryBodyCode = useSignal("ZIFA");
-  const primaryBodyLabel = useSignal("ZIFA");
+  const primaryBodyCode = useSignal("");
+  const primaryBodyLabel = useSignal("");
 
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(async () => {
@@ -200,20 +156,15 @@ export default component$(() => {
     const oid = appR.data.organisation_id?.trim();
     if (oid) {
       const orgR = await getOrganisation(oid);
-      organisationName.value = orgR.ok
-        ? organisationDisplayName(orgR.data).trim() || "—"
-        : "—";
-      if (orgR.ok) {
-        const sp = orgR.data.sport;
-        organisationSport.value =
-          sp != null && String(sp).trim() !== "" ? String(sp).trim() : "";
-      } else {
-        organisationSport.value = "";
-      }
+      organisation.value = orgR.ok ? orgR.data : null;
     } else {
-      organisationName.value = "—";
-      organisationSport.value = "";
+      organisation.value = null;
     }
+
+    const organisationSport =
+      organisation.value?.sport != null && String(organisation.value.sport).trim() !== ""
+        ? String(organisation.value.sport).trim()
+        : "";
 
     const [zsR, sbR] = await Promise.all([
       listZimbabweSports({ limit: 200, offset: 0 }),
@@ -229,7 +180,7 @@ export default component$(() => {
 
     reviewerBody.value = reviewerRoutingBodyFromSession(getCurrentUser(), sb) as ReviewerBody;
     const resolved = resolvePrimaryBodyFromOrgSport(
-      routingSportForApplication(appR.data.sport, organisationSport.value),
+      routingSportForApplication(appR.data.sport, organisationSport),
       zs,
       sb,
     );
@@ -239,10 +190,27 @@ export default component$(() => {
     let approvalRows: ApiApproval[] = apprR.ok ? apprR.data : [];
 
     const primaryCode = primaryBodyCode.value;
+
+    // AFFILIATE: POST `under_review` once when an AFFILIATE reviewer opens an `awaiting_psl` file.
+    if (
+      apprR.ok &&
+      reviewerBody.value === "AFFILIATE" &&
+      shouldAutoCreateAffiliateUnderReview(appR.data, approvalRows)
+    ) {
+      await createApproval({
+        application_id: id,
+        body: "AFFILIATE",
+        status: "under_review",
+      });
+      const refetch = await listApprovals({ application_id: id, limit: 50, offset: 0 });
+      if (refetch.ok) approvalRows = refetch.data;
+    }
+
     // Primary stage: POST `under_review` once per first-line body (first open only).
     if (
       apprR.ok &&
-      primaryStageCanEditApplication(appR.data) &&
+      primaryReviewerCanEditApplication(appR.data) &&
+      primaryReviewerMatchesApplication(reviewerBody.value, primaryCode, appR.data.status) &&
       !hasUnderReviewApprovalForBody(approvalRows, primaryCode)
     ) {
       const u = getCurrentUser();
@@ -257,7 +225,7 @@ export default component$(() => {
       if (refetch.ok) approvalRows = refetch.data;
     }
 
-    if (apprR.ok && reviewerBody.value === "SRC" && shouldAutoCreateSrcUnderReview(appR.data, approvalRows, primaryCode)) {
+    if (apprR.ok && reviewerBody.value === "SRC" && shouldAutoCreateSrcUnderReview(appR.data, approvalRows)) {
       await createApproval({
         application_id: id,
         body: "SRC",
@@ -272,7 +240,15 @@ export default component$(() => {
   });
 
   const app = application.value;
-  const routingSportLabel = app ? routingSportForApplication(app.sport, organisationSport.value) : "";
+  const organisationName = organisation.value
+    ? organisationDisplayName(organisation.value).trim() || "—"
+    : "—";
+  const organisationSport =
+    organisation.value?.sport != null && String(organisation.value.sport).trim() !== ""
+      ? String(organisation.value.sport).trim()
+      : "";
+  const routingSportLabel = app ? routingSportForApplication(app.sport, organisationSport) : "";
+  const applicationTypeLabel = app ? labelApplicationType(app.application_type) : "";
 
   return (
     <div class="flex flex-1 flex-col min-h-0 min-w-0 bg-background text-on-background">
@@ -319,6 +295,14 @@ export default component$(() => {
               <header class="mb-6 rounded-xl bg-white/80 p-4 shadow-[0_20px_40px_rgba(0,0,0,0.04)] backdrop-blur-md sm:mb-10 sm:p-6">
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
                   <div>
+                    {applicationTypeLabel ? (
+                      <div class="mb-3">
+                        <span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-primary">
+                          <span class="material-symbols-outlined text-sm">category</span>
+                          {applicationTypeLabel}
+                        </span>
+                      </div>
+                    ) : null}
                     <div class="flex items-center gap-2 mb-1">
                       <span class="text-secondary font-bold text-xs tracking-widest uppercase">
                         Application Reference
@@ -340,7 +324,7 @@ export default component$(() => {
                         <div class="flex flex-col gap-1">
                           <div class="flex items-center gap-2">
                             <span class="material-symbols-outlined text-secondary text-lg">domain</span>
-                            <span class="font-bold text-xl text-on-surface">{organisationName.value}</span>
+                            <span class="font-bold text-xl text-on-surface">{organisationName}</span>
                           </div>
                           {routingSportLabel ? (
                             <p class="text-sm text-on-surface-variant pl-8">
@@ -407,197 +391,14 @@ export default component$(() => {
               </header>
 
               <div class="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8 items-start">
-                <div class="lg:col-span-8 space-y-8">
-
-                  {/* Trip Details */}
-                  <section class="rounded-xl bg-surface-container-lowest p-5 shadow-sm sm:p-8">
-                    <div class="mb-6 flex items-start justify-between gap-4">
-                      <h2 class="text-xl font-bold text-primary flex items-center gap-3">
-                        <span class="w-1 bg-secondary h-6 rounded-full" />
-                        Trip Details
-                      </h2>
-                    </div>
-                    <div class="flex flex-col gap-6 sm:flex-row sm:flex-wrap sm:gap-12">
-                      <div class="flex gap-4 min-w-0">
-                        <div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-primary">
-                          <span class="material-symbols-outlined text-3xl">flight_takeoff</span>
-                        </div>
-                        <div>
-                          <div class="text-[10px] text-outline font-extrabold tracking-widest">SCHEDULE</div>
-                          <div class="text-sm font-bold">
-                            {formatIsoDate(app.departure_date)} – {formatIsoDate(app.return_date)}
-                          </div>
-                          {app.departure_date && app.return_date ? (
-                            <div class="text-xs text-on-surface-variant italic">
-                              {Math.ceil(
-                                (new Date(app.return_date).getTime() - new Date(app.departure_date).getTime()) /
-                                  86400000,
-                              )}{" "}
-                              days
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <div class="flex gap-4 min-w-0">
-                        <div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-primary">
-                          <span class="material-symbols-outlined text-3xl">groups</span>
-                        </div>
-                        <div>
-                          <div class="text-[10px] text-outline font-extrabold tracking-widest">DELEGATION</div>
-                          <div class="text-sm font-bold">
-                            {(app.player_count ?? 0) + (app.officials_count ?? 0)} Personnel
-                          </div>
-                          <div class="text-xs text-on-surface-variant">
-                            {app.player_count ?? "—"} Players · {app.officials_count ?? "—"} Officials
-                          </div>
-                        </div>
-                      </div>
-
-                      <div class="flex gap-4 min-w-0">
-                        <div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-primary">
-                          <span class="material-symbols-outlined text-3xl">location_on</span>
-                        </div>
-                        <div>
-                          <div class="text-[10px] text-outline font-extrabold tracking-widest">DESTINATION</div>
-                          <div class="text-sm font-bold">{str(app.host_country) || "—"}</div>
-                          {str(app.host_city) ? (
-                            <div class="text-xs text-on-surface-variant">{str(app.host_city)}</div>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      {str(app.travel_mode) ? (
-                        <div class="flex gap-4 min-w-0">
-                          <div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-primary">
-                            <span class="material-symbols-outlined text-3xl">connecting_airports</span>
-                          </div>
-                          <div>
-                            <div class="text-[10px] text-outline font-extrabold tracking-widest">TRAVEL MODE</div>
-                            <div class="text-sm font-bold">{str(app.travel_mode)}</div>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-
-                    {str(app.port_of_entry) || str(app.port_of_exit) ? (
-                      <div class="mt-6 grid grid-cols-2 gap-4 text-sm">
-                        {str(app.port_of_entry) ? (
-                          <div>
-                            <div class="text-[10px] text-outline font-extrabold tracking-widest mb-1">PORT OF ENTRY</div>
-                            <div class="font-medium">{str(app.port_of_entry)}</div>
-                          </div>
-                        ) : null}
-                        {str(app.port_of_exit) ? (
-                          <div>
-                            <div class="text-[10px] text-outline font-extrabold tracking-widest mb-1">PORT OF EXIT</div>
-                            <div class="font-medium">{str(app.port_of_exit)}</div>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </section>
-
-                  {/* Application Details */}
-                  <section class="group rounded-xl bg-surface-container-lowest p-5 shadow-sm sm:p-8">
-                    <div class="mb-6 flex items-start justify-between gap-4">
-                      <h2 class="text-xl font-bold text-primary flex items-center gap-3">
-                        <span class="w-1 bg-secondary h-6 rounded-full" />
-                        Application Details
-                      </h2>
-                    </div>
-                    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 md:gap-y-6 md:gap-x-12 text-sm">
-                      {organisationName.value ? (
-                        <div>
-                          <div class="text-xs text-outline mb-1 font-bold">ORGANISATION</div>
-                          <div class="font-semibold">{organisationName.value}</div>
-                          {routingSportLabel ? (
-                            <div class="text-xs text-on-surface-variant mt-1">Sport: {routingSportLabel}</div>
-                          ) : null}
-                        </div>
-                      ) : null}
-                      {str(app.event_type) ? (
-                        <div>
-                          <div class="text-xs text-outline mb-1 font-bold">EVENT TYPE</div>
-                          <div class="font-semibold">{labelEventType(app.event_type)}</div>
-                        </div>
-                      ) : null}
-                      {str(app.tournament_name) ? (
-                        <div>
-                          <div class="text-xs text-outline mb-1 font-bold">TOURNAMENT</div>
-                          <div class="font-semibold">{str(app.tournament_name)}</div>
-                        </div>
-                      ) : null}
-                      {str(app.age_group) ? (
-                        <div>
-                          <div class="text-xs text-outline mb-1 font-bold">AGE GROUP</div>
-                          <div class="font-semibold">{str(app.age_group)}</div>
-                        </div>
-                      ) : null}
-                      {str(app.gender_category) ? (
-                        <div>
-                          <div class="text-xs text-outline mb-1 font-bold">GENDER CATEGORY</div>
-                          <div class="font-semibold">{str(app.gender_category)}</div>
-                        </div>
-                      ) : null}
-                      {str(app.opponent_team_name) || str(app.opponent_team_country) ? (
-                        <div>
-                          <div class="text-xs text-outline mb-1 font-bold">OPPONENT</div>
-                          <div class="font-semibold">
-                            {[str(app.opponent_team_name), str(app.opponent_team_country)]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </div>
-                        </div>
-                      ) : null}
-                      {str(app.priority) && app.priority !== "normal" ? (
-                        <div>
-                          <div class="text-xs text-outline mb-1 font-bold">PRIORITY</div>
-                          <div class="font-semibold text-tertiary uppercase">{str(app.priority)}</div>
-                        </div>
-                      ) : null}
-                    </div>
-                    {str(app.priority_reason) ? (
-                      <div class="mt-6 bg-tertiary/5 border-l-4 border-tertiary px-4 py-3 rounded text-sm">
-                        <div class="text-xs font-bold text-tertiary uppercase mb-1">Priority Reason</div>
-                        <p class="text-on-surface">{str(app.priority_reason)}</p>
-                      </div>
-                    ) : null}
-                  </section>
-
-                  {/* Players & Officials */}
-                  {personnel.value.length > 0 ? (
-                    <section class="rounded-xl bg-surface-container-lowest p-5 shadow-sm sm:p-8">
-                      <div class="mb-4 flex items-start justify-between gap-4">
-                        <h2 class="text-xl font-bold text-primary flex items-center gap-3">
-                          <span class="w-1 bg-secondary h-6 rounded-full" />
-                          Players &amp; Officials
-                        </h2>
-                      </div>
-                      <TravelPersonnelRoster personnel={personnel.value} mode="view" />
-                    </section>
-                  ) : null}
-
-                  {/* Verification Documents */}
-                  <section class="rounded-xl bg-surface-container-lowest p-5 shadow-sm sm:p-8">
-                    <h2 class="text-xl font-bold text-primary mb-6 flex items-center gap-3">
-                      <span class="w-1 bg-secondary h-6 rounded-full" />
-                      Verification Documents
-                    </h2>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <ApplicationDocumentLink kind="2.1 Compliance declaration" storedPath={app.compliance_declaration_doc} />
-                      <ApplicationDocumentLink kind="2.3 Invitation letter" storedPath={app.invitation_letter_doc} />
-                      <ApplicationDocumentLink
-                        kind="2.4 National association clearance"
-                        storedPath={app.national_assoc_clearance_doc}
-                      />
-                      <ApplicationDocumentLink kind="2.9 Proof of funding" storedPath={app.funding_proof_doc} />
-                      <ApplicationDocumentLink
-                        kind="2.7 Liabilities & expenditure"
-                        storedPath={app.liabilities_breakdown_doc}
-                      />
-                    </div>
-                  </section>
+                <div class="lg:col-span-8">
+                  <ApplicationDossier
+                    app={app}
+                    organisation={organisation.value}
+                    approvals={approvals.value}
+                    personnel={personnel.value}
+                    routingSportLabel={routingSportLabel}
+                  />
                 </div>
 
                 {/* Sidebar */}
@@ -610,7 +411,7 @@ export default component$(() => {
 
                     {reviewerBody.value === "SRC" ? (
                       <>
-                        {app && !srcCanEditApplication(app, approvals.value, primaryBodyCode.value) ? (
+                        {app && !srcCanEditApplication(app, approvals.value) ? (
                           <div class="rounded-xl border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
                             <p class="text-[10px] font-bold uppercase tracking-widest text-secondary mb-2">
                               {srcReadOnlyExplanation(app, approvals.value, primaryBodyCode.value, primaryBodyLabel.value)
@@ -720,7 +521,7 @@ export default component$(() => {
                           </p>
                         ) : null}
 
-                        {app && srcCanEditApplication(app, approvals.value, primaryBodyCode.value) ? (
+                        {app && srcCanEditApplication(app, approvals.value) ? (
                           <button
                             class="w-full bg-secondary-container text-on-secondary-container py-4 rounded-xl font-extrabold tracking-tight hover:shadow-[0_0_20px_rgba(253,208,0,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                             type="button"
@@ -729,7 +530,7 @@ export default component$(() => {
                               if (
                                 !srcActionSelected.value ||
                                 !app ||
-                                !srcCanEditApplication(app, approvals.value, primaryBodyCode.value)
+                                !srcCanEditApplication(app, approvals.value)
                               )
                                 return;
                               const user = getCurrentUser();
@@ -774,7 +575,7 @@ export default component$(() => {
 
                               // When SRC approves, generate the travel certificate (legacy immigration stage removed).
                               if (approvalStatus === "approved") {
-                                const org = organisationName.value.trim();
+                                const org = organisationName.trim();
                                 if (!org || org === "—") {
                                   submitError.value =
                                     "SRC approval saved, but certificate could not be generated (missing organisation name).";
@@ -814,29 +615,214 @@ export default component$(() => {
                           </button>
                         ) : null}
 
-                        {app && srcCanEditApplication(app, approvals.value, primaryBodyCode.value) ? (
+                        {app && srcCanEditApplication(app, approvals.value) ? (
                           <div class="mt-6 flex items-center gap-2 text-[10px] text-white/40 justify-center">
                             <span class="material-symbols-outlined text-xs">info</span>
                             This action will be logged under your SRC reviewer account
                           </div>
                         ) : null}
                       </>
+                    ) : reviewerBody.value === "AFFILIATE" ? (
+                      <>
+                        {app && !affiliateCanEditApplication(app, approvals.value) ? (
+                          <div class="rounded-xl border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
+                            <p class="text-[10px] font-bold uppercase tracking-widest text-secondary mb-2">
+                              {affiliateReadOnlyExplanation(app.status).title}
+                            </p>
+                            <p class="text-white/85">
+                              {affiliateReadOnlyExplanation(app.status).body}
+                            </p>
+                          </div>
+                        ) : (
+                          <div class="space-y-4 mb-8">
+                            <div class="rounded-xl border border-secondary/30 bg-white/5 p-4 space-y-2">
+                              <p class="text-[10px] font-bold uppercase tracking-widest text-secondary">
+                                PSL first-line review
+                              </p>
+                              <p class="text-xs text-white/70 leading-relaxed">
+                                Approve to forward the dossier to the sport body. No document upload is required at this
+                                stage.
+                              </p>
+                            </div>
+
+                            <label class="block">
+                              <span class="text-[10px] font-bold tracking-widest text-secondary/80">REVIEWER ACTION</span>
+                              <div class="grid grid-cols-1 gap-3 mt-2">
+                                <button
+                                  class={[
+                                    "group flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
+                                    affiliateActionSelected.value === "approved"
+                                      ? "border-primary-fixed-dim bg-primary-fixed/20"
+                                      : "border-white/20 hover:bg-white/10",
+                                  ].join(" ")}
+                                  type="button"
+                                  onClick$={() => {
+                                    affiliateActionSelected.value = "approved";
+                                  }}
+                                >
+                                  <div
+                                    class={[
+                                      "w-5 h-5 rounded-full border-2 shrink-0 mt-0.5 transition-colors",
+                                      affiliateActionSelected.value === "approved"
+                                        ? "border-primary-fixed-dim bg-primary-fixed-dim"
+                                        : "border-primary-fixed-dim",
+                                    ].join(" ")}
+                                  />
+                                  <span class="text-sm font-bold">Approve</span>
+                                </button>
+
+                                <button
+                                  class={[
+                                    "group flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
+                                    affiliateActionSelected.value === "information_requested"
+                                      ? "border-secondary bg-secondary/20"
+                                      : "border-white/20 hover:bg-white/10",
+                                  ].join(" ")}
+                                  type="button"
+                                  onClick$={() => {
+                                    affiliateActionSelected.value = "information_requested";
+                                  }}
+                                >
+                                  <div
+                                    class={[
+                                      "w-5 h-5 rounded-full border-2 shrink-0 mt-0.5 transition-colors",
+                                      affiliateActionSelected.value === "information_requested"
+                                        ? "border-secondary bg-secondary"
+                                        : "border-secondary",
+                                    ].join(" ")}
+                                  />
+                                  <span class="text-sm font-bold">Request correction</span>
+                                </button>
+
+                                <button
+                                  class={[
+                                    "group flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
+                                    affiliateActionSelected.value === "rejected"
+                                      ? "border-error bg-error/20"
+                                      : "border-white/20 hover:bg-error/30",
+                                  ].join(" ")}
+                                  type="button"
+                                  onClick$={() => {
+                                    affiliateActionSelected.value = "rejected";
+                                  }}
+                                >
+                                  <div
+                                    class={[
+                                      "w-5 h-5 rounded-full border-2 shrink-0 mt-0.5 transition-colors",
+                                      affiliateActionSelected.value === "rejected"
+                                        ? "border-error bg-error"
+                                        : "border-error",
+                                    ].join(" ")}
+                                  />
+                                  <span class="text-sm font-bold text-on-tertiary-container">Reject</span>
+                                </button>
+                              </div>
+                            </label>
+
+                            <label class="block mt-6">
+                              <span class="text-[10px] font-bold tracking-widest text-secondary/80">
+                                COMMENTARY — APPROVE · REQUEST CORRECTION · REJECT
+                              </span>
+                              <textarea
+                                class="mt-2 w-full bg-white/5 border border-white/10 rounded-xl text-sm p-4 focus:ring-secondary focus:border-secondary placeholder-white/20"
+                                placeholder="Optional: reasons for Approve, Request correction, or Reject…"
+                                rows={4}
+                                value={decisionNote.value}
+                                onInput$={(_, el) => {
+                                  decisionNote.value = el.value;
+                                }}
+                              />
+                            </label>
+                          </div>
+                        )}
+
+                        {submitError.value ? (
+                          <p class="mb-4 text-xs text-error bg-error/10 rounded-lg px-3 py-2" role="alert">
+                            {submitError.value}
+                          </p>
+                        ) : null}
+
+                        {app && affiliateCanEditApplication(app, approvals.value) ? (
+                          <button
+                            class="w-full bg-secondary-container text-on-secondary-container py-4 rounded-xl font-extrabold tracking-tight hover:shadow-[0_0_20px_rgba(253,208,0,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            type="button"
+                            disabled={affiliateActionSelected.value === null || submitting.value}
+                            onClick$={async () => {
+                              if (
+                                !affiliateActionSelected.value ||
+                                !app ||
+                                !affiliateCanEditApplication(app, approvals.value)
+                              )
+                                return;
+                              const user = getCurrentUser();
+                              submitting.value = true;
+                              submitError.value = null;
+
+                              const action = affiliateActionSelected.value;
+
+                              const approvalR = await createApproval({
+                                application_id: id,
+                                body: "AFFILIATE",
+                                status: action,
+                                decided_at: new Date().toISOString(),
+                                decided_by: user?.id ?? null,
+                                decision_note: decisionNote.value.trim() || null,
+                              });
+
+                              if (!approvalR.ok) {
+                                submitError.value = approvalR.error;
+                                submitting.value = false;
+                                return;
+                              }
+
+                              if (action === "approved" || action === "rejected") {
+                                const nextStatus =
+                                  action === "approved" ? "awaiting_sport_body" : "rejected";
+                                const patchR = await patchApplication(id, { status: nextStatus });
+                                if (!patchR.ok) {
+                                  submitError.value = patchR.error;
+                                  submitting.value = false;
+                                  return;
+                                }
+                              }
+
+                              successToast.value = successMessageForAffiliateDecision(action);
+                              window.setTimeout(() => {
+                                window.location.assign("/approver/dashboard/");
+                              }, 2200);
+                            }}
+                          >
+                            {successToast.value
+                              ? "Saved"
+                              : submitting.value
+                                ? "Submitting…"
+                                : "SUBMIT OFFICIAL DECISION"}
+                          </button>
+                        ) : null}
+
+                        {app && affiliateCanEditApplication(app, approvals.value) ? (
+                          <div class="mt-6 flex items-center gap-2 text-[10px] text-white/40 justify-center">
+                            <span class="material-symbols-outlined text-xs">info</span>
+                            This action will be logged under your PSL reviewer account
+                          </div>
+                        ) : null}
+                      </>
                     ) : (
                       <>
                         {app &&
-                        (!primaryStageCanEditApplication(app) ||
-                          !primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value)) ? (
+                        (!primaryReviewerCanEditApplication(app) ||
+                          !primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value, app.status)) ? (
                           <div class="rounded-xl border border-white/15 bg-white/5 p-4 text-sm leading-relaxed">
                             <p class="text-[10px] font-bold uppercase tracking-widest text-secondary mb-2">
-                              {primaryStageCanEditApplication(app) &&
-                              !primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value)
+                              {primaryReviewerCanEditApplication(app) &&
+                              !primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value, app.status)
                                 ? "Different reviewer body"
                                 : primaryReadOnlyExplanation(app.status, primaryBodyLabel.value).title}
                             </p>
                             <p class="text-white/85">
-                              {primaryStageCanEditApplication(app) &&
-                              !primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value)
-                                ? `This dossier is queued for ${primaryBodyLabel.value} first-line review.`
+                              {primaryReviewerCanEditApplication(app) &&
+                              !primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value, app.status)
+                                ? `This dossier is queued for ${primaryBodyLabel.value || "the assigned sport body"} first-line review.`
                                 : primaryReadOnlyExplanation(app.status, primaryBodyLabel.value).body}
                             </p>
                           </div>
@@ -964,8 +950,8 @@ export default component$(() => {
                         ) : null}
 
                         {app &&
-                        primaryStageCanEditApplication(app) &&
-                        primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value) ? (
+                        primaryReviewerCanEditApplication(app) &&
+                        primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value, app.status) ? (
                           <button
                             class="w-full bg-secondary-container text-on-secondary-container py-4 rounded-xl font-extrabold tracking-tight hover:shadow-[0_0_20px_rgba(253,208,0,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                             type="button"
@@ -978,8 +964,8 @@ export default component$(() => {
                               if (
                                 !actionSelected.value ||
                                 !app ||
-                                !primaryStageCanEditApplication(app) ||
-                                !primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value)
+                                !primaryReviewerCanEditApplication(app) ||
+                                !primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value, app.status)
                               )
                                 return;
                               const user = getCurrentUser();
@@ -1072,8 +1058,8 @@ export default component$(() => {
                         ) : null}
 
                         {app &&
-                        primaryStageCanEditApplication(app) &&
-                        primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value) ? (
+                        primaryReviewerCanEditApplication(app) &&
+                        primaryReviewerMatchesApplication(reviewerBody.value, primaryBodyCode.value, app.status) ? (
                           <div class="mt-6 flex items-center gap-2 text-[10px] text-white/40 justify-center">
                             <span class="material-symbols-outlined text-xs">info</span>
                             This action will be logged under your {primaryBodyLabel.value} reviewer account

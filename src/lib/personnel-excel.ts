@@ -1,8 +1,18 @@
 /** Excel template + parsing for travel personnel (SheetJS). */
-import type { PersonnelGender, PersonnelStatus, TravelPersonnelInput } from "~/lib/travel-personnel-types";
+import type { IncomingDelegationPersonnelInput, PersonnelGender, PersonnelStatus, TravelPersonnelInput } from "~/lib/travel-personnel-types";
 import { PERSONNEL_GENDERS, PERSONNEL_STATUSES } from "~/lib/travel-personnel-types";
 
 export const PERSONNEL_TEMPLATE_FILENAME = "zfta-personnel-template.xlsx";
+
+export const INCOMING_DELEGATION_TEMPLATE_FILENAME = "zfta-incoming-delegation-template.xlsx";
+
+/** Header row for incoming tour delegation roster. */
+export const INCOMING_DELEGATION_HEADERS = [
+  "full_name",
+  "passport_number",
+  "country_of_origin",
+  "passport_expiry",
+] as const;
 
 /** Header row in the template — matches DB / API fields. */
 export const PERSONNEL_TEMPLATE_HEADERS = [
@@ -166,6 +176,100 @@ export async function parsePersonnelExcelFile(file: File): Promise<ParsePersonne
     return { ok: false, error: "Some rows had errors; fix the spreadsheet and try again.", rowErrors };
   }
   if (!out.length) return { ok: false, error: "No valid personnel rows found." };
+
+  return { ok: true, rows: out };
+}
+
+export async function downloadIncomingDelegationTemplateXlsx(): Promise<void> {
+  const XLSX = await import("xlsx");
+  const ws = XLSX.utils.aoa_to_sheet([
+    [...INCOMING_DELEGATION_HEADERS],
+    ["Example Delegate", "AB1234567", "South Africa", "2030-12-31"],
+  ]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "delegation");
+  XLSX.writeFile(wb, INCOMING_DELEGATION_TEMPLATE_FILENAME);
+}
+
+export type ParseIncomingDelegationResult =
+  | { ok: true; rows: IncomingDelegationPersonnelInput[] }
+  | { ok: false; error: string; rowErrors?: string[] };
+
+function mapDelegationHeaders(row: Record<string, unknown>): Record<string, unknown> {
+  const mapped: Record<string, unknown> = {};
+  for (const [k, val] of Object.entries(row)) {
+    const key = normalizeHeader(k);
+    if (key === "expiry_date" || key === "passport_expiry_date") {
+      mapped["passport_expiry"] = val;
+    } else if (key === "country" || key === "countries_of_origin") {
+      mapped["country_of_origin"] = val;
+    } else {
+      mapped[key] = val;
+    }
+  }
+  return mapped;
+}
+
+function rowToIncomingDelegation(
+  row: Record<string, unknown>,
+  rowIndex: number,
+): { ok: true; p: IncomingDelegationPersonnelInput } | { ok: false; msg: string } {
+  const mapped = mapDelegationHeaders(row);
+
+  const full_name = String(mapped["full_name"] ?? "").trim();
+  if (!full_name) return { ok: false, msg: `Row ${rowIndex}: full_name is required` };
+
+  const passport_number = String(mapped["passport_number"] ?? "").trim();
+  if (!passport_number) return { ok: false, msg: `Row ${rowIndex}: passport_number is required` };
+
+  const country_of_origin = String(mapped["country_of_origin"] ?? "").trim();
+  if (!country_of_origin) return { ok: false, msg: `Row ${rowIndex}: country_of_origin is required` };
+
+  const passport_expiry = formatDate(mapped["passport_expiry"]);
+  if (!passport_expiry) return { ok: false, msg: `Row ${rowIndex}: passport_expiry is required (YYYY-MM-DD)` };
+
+  return {
+    ok: true,
+    p: { full_name, passport_number, country_of_origin, passport_expiry, status: "active" },
+  };
+}
+
+export async function parseIncomingDelegationExcelFile(file: File): Promise<ParseIncomingDelegationResult> {
+  const XLSX = await import("xlsx");
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array", cellDates: true });
+  const first = wb.SheetNames[0];
+  if (!first) return { ok: false, error: "The workbook has no sheets." };
+
+  const sheet = wb.Sheets[first];
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+  if (!rows.length) return { ok: false, error: "No data rows found under the header row." };
+
+  const out: IncomingDelegationPersonnelInput[] = [];
+  const rowErrors: string[] = [];
+
+  rows.forEach((raw, i) => {
+    const rowIndex = i + 2;
+    const mapped = mapDelegationHeaders(raw);
+    const fn = String(mapped["full_name"] ?? "").trim();
+    if (!fn) return;
+    if (fn.toLowerCase() === "example delegate") return;
+
+    const r = rowToIncomingDelegation(raw, rowIndex);
+    if (r.ok) {
+      out.push(r.p);
+    } else {
+      rowErrors.push(r.msg);
+    }
+  });
+
+  if (rowErrors.length && !out.length) {
+    return { ok: false, error: "Could not import any rows.", rowErrors };
+  }
+  if (rowErrors.length) {
+    return { ok: false, error: "Some rows had errors; fix the spreadsheet and try again.", rowErrors };
+  }
+  if (!out.length) return { ok: false, error: "No valid delegation rows found." };
 
   return { ok: true, rows: out };
 }

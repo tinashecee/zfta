@@ -18,6 +18,7 @@
  * shown, matched to approval rows whose body is **AFFILIATE**; completion uses all visible rows.
  */
 import type { ApiApproval } from "~/lib/approvals-api";
+import { approvalBodyMatches } from "~/lib/approval-rules";
 
 export function labelEventType(raw: string | undefined): string {
   const s = (raw ?? "").trim().toLowerCase();
@@ -151,28 +152,6 @@ function governanceAllPending(
   return { rows, completion: 0 };
 }
 
-function approvalMatchesBodyCode(a: ApiApproval, bodyCode: string): boolean {
-  const want = bodyCode.trim().toUpperCase();
-  if (!want) return false;
-
-  // Newer APIs may store the specific sport-body routing code separately from the enum `body`.
-  const gotCode = ((a as unknown as { body_code?: string | null }).body_code ?? "").trim().toUpperCase();
-  if (gotCode) {
-    if (gotCode === want) return true;
-    if (gotCode.includes(want) || want.includes(gotCode)) return true;
-    return false;
-  }
-
-  const got = (a.body ?? "").trim().toUpperCase();
-  if (!got) return false;
-  // If the API only stores the enum `SPORT_BODY` without a `body_code`,
-  // allow it to satisfy the primary sport-body stake (not AFFILIATE or SRC).
-  if (got === "SPORT_BODY" && want !== "SRC" && want !== "AFFILIATE") return true;
-  if (got === want) return true;
-  if (got.includes(want) || want.includes(got)) return true;
-  return false;
-}
-
 /**
  * Governance from approval rows; empty list ⇒ all bodies pending.
  * Order: optional PSL (AFFILIATE), sport-specific body (`primary`), then SRC.
@@ -204,7 +183,7 @@ export function governanceFromApprovals(
   const latest = new Map<string, ApiApproval>();
   for (const a of sorted) {
     for (const t of stakes) {
-      if (approvalMatchesBodyCode(a, t.code) && !latest.has(t.code)) {
+      if (approvalBodyMatches(a, t.code) && !latest.has(t.code)) {
         latest.set(t.code, a);
       }
     }

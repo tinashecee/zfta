@@ -54,3 +54,13 @@ export const APPLICATION_TYPE_FIELD = "application_type" as const;
 export function isOutgoingTourApplicationType(raw: string | null | undefined): boolean {
   return String(raw ?? "").trim().toLowerCase() === "outgoing_tour";
 }
+
+/** Human label for `application_type` (e.g. outgoing_tour → Outgoing Sport Tour). */
+export function labelApplicationType(raw: string | null | undefined): string {
+  const key = String(raw ?? "").trim().toLowerCase() as ApplicationTypeKey;
+  const def = APPLICATION_TYPES[key];
+  if (def) return def.label;
+  const s = String(raw ?? "").trim();
+  if (!s) return "Travel application";
+  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
